@@ -1,5 +1,6 @@
 import { supabaseServer } from "./supabase";
 import { daysAgoISO, todayISO } from "./dates";
+import { getCalorieBreakdownRange, type CalorieBreakdown } from "./calories";
 import type {
   ActivityDaily,
   CoachKnowledge,
@@ -21,6 +22,7 @@ export type CoachContext = {
   recent_workouts: Workout[];
   yesterday_plan: TrainingPlan | null;
   recent_messages: CoachMessage[];
+  calorie_breakdowns: CalorieBreakdown[];
 };
 
 export async function loadCoachContext(opts?: {
@@ -97,6 +99,10 @@ export async function loadCoachContext(opts?: {
     a.activity_date.localeCompare(b.activity_date)
   );
 
+  const calorie_breakdowns = await getCalorieBreakdownRange(
+    recent_activity.map((a) => a.activity_date)
+  );
+
   return {
     profile: (profileRes.data ?? null) as Profile | null,
     knowledge: (knowledgeRes.data ?? null) as CoachKnowledge | null,
@@ -107,6 +113,7 @@ export async function loadCoachContext(opts?: {
     recent_workouts: (workoutsRes.data ?? []) as Workout[],
     yesterday_plan: (yPlanRes.data ?? null) as TrainingPlan | null,
     recent_messages,
+    calorie_breakdowns,
   };
 }
 
@@ -154,10 +161,28 @@ function activityBlock(ctx: CoachContext): string {
   if (ctx.recent_activity.length === 0) {
     lines.push("(no data yet)");
   } else {
+    const breakdownByDate = new Map(
+      ctx.calorie_breakdowns.map((b) => [b.date, b])
+    );
     for (const d of ctx.recent_activity) {
       const parts: string[] = [];
       if (d.steps != null) parts.push(`steps=${d.steps}`);
       if (d.active_calories != null) parts.push(`active_kcal=${d.active_calories}`);
+
+      const cb = breakdownByDate.get(d.activity_date);
+      if (cb?.computable) {
+        parts.push(`BMR=${cb.bmr}`);
+        parts.push(`total=${cb.total}`);
+        const w = cb.weight_used_kg;
+        const wTag =
+          cb.weight_source === "log_same_day"
+            ? `${w}kg (logged today)`
+            : `${w}kg (most recent log)`;
+        parts.push(`weight=${wTag}`);
+      } else if (cb) {
+        parts.push(`total=unknown (reason: ${cb.reason_if_not})`);
+      }
+
       if (d.sleep_minutes != null)
         parts.push(`sleep_hours=${(d.sleep_minutes / 60).toFixed(1)}`);
       if (d.avg_hr != null) parts.push(`avg_hr=${d.avg_hr}`);
@@ -246,6 +271,7 @@ export function coachSystemPrompt(ctx: CoachContext): string {
     `Coaching style: ${style}.`,
     "The LONG-TERM KNOWLEDGE section reflects facts about this person that are stable over time — treat it as ground truth.",
     "The ACTIVITY DATA section reflects what the user actually did per their watch/phone (steps, sleep, HR, workouts). If they say 'I trained yesterday' but no workout is in ACTIVITY DATA from yesterday, gently flag the discrepancy. If they ask about training and ACTIVITY DATA is empty, mention they should set up Health Auto Export to give you better signal.",
+    "Total calories burned per day is computed as: Mifflin-St Jeor BMR (using the user's height, age, sex, and most recent logged weight) + Active calories from their watch. If a day has no weight logged on or before it, total is not shown — gently encourage the user to log weight regularly so calorie math stays accurate.",
     "The RECENT DATA section reflects the last 7-14 days of logged behavior (profile, daily logs, meals, yesterday's plan). Use all three sources together.",
     "If long-term knowledge contradicts a single recent data point (e.g., user noted today they're bored of an exercise they previously listed as a favorite), prefer the recent data but acknowledge the shift.",
     "Be specific. Reference actual numbers from the context when relevant. Do not invent data that isn't there.",

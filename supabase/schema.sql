@@ -64,15 +64,25 @@ create table if not exists public.training_plans (
 
 drop table if exists public.activity cascade;
 
--- Daily activity summaries (one row per day, source)
+-- Daily activity summaries (one row per day, source).
+--
+-- NOTE: resting_calories and total_calories are NOT used by the app. HAE's
+-- basal_energy_burned was double-counted across iPhone + Zepp (5-7k kcal/day,
+-- ~3x reality), so we ignore it at read time and compute total calories at
+-- runtime via Mifflin-St Jeor BMR (see src/lib/calories.ts), which uses the
+-- user's profile + most recent logged weight from daily_log. The columns
+-- stay in the schema in case we want to keep raw HAE values for diagnostics.
+--
+-- One-time data cleanup (already run; documented for reproducibility):
+--   update activity_daily set resting_calories = null, total_calories = null;
 create table if not exists public.activity_daily (
   id              bigserial primary key,
   activity_date   date not null,
   source          text not null default 'apple_health',
   steps           integer,
   active_calories integer,
-  resting_calories integer,
-  total_calories  integer,
+  resting_calories integer,    -- unused (see note above)
+  total_calories  integer,     -- unused (see note above)
   distance_m      integer,
   floors_climbed  integer,
   exercise_minutes integer,

@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase";
 import { daysAgoISO, formatShort } from "@/lib/dates";
+import { getCalorieBreakdownRange } from "@/lib/calories";
 import type { ActivityDaily, Workout } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,14 @@ export default async function ActivityPage() {
   const daily = (dailyRes.data ?? []) as ActivityDaily[];
   const workouts = (workoutsRes.data ?? []) as Workout[];
 
+  // Compute BMR + total calories per day. HAE's basal_energy_burned was
+  // unreliable (multi-source double-counting), so we run Mifflin-St Jeor
+  // ourselves against the latest logged weight. See src/lib/calories.ts.
+  const breakdowns = await getCalorieBreakdownRange(
+    daily.map((d) => d.activity_date)
+  );
+  const breakdownByDate = new Map(breakdowns.map((b) => [b.date, b]));
+
   const empty = daily.length === 0 && workouts.length === 0;
 
   return (
@@ -66,36 +75,61 @@ export default async function ActivityPage() {
             Daily summaries
           </h2>
           <div className="rounded-2xl border border-zinc-800 overflow-hidden">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead className="bg-zinc-900/60 text-zinc-400">
                 <tr>
-                  <th className="text-left px-3 py-2 font-normal">Date</th>
-                  <th className="text-right px-2 py-2 font-normal">Steps</th>
-                  <th className="text-right px-2 py-2 font-normal">Active</th>
-                  <th className="text-right px-2 py-2 font-normal">Sleep</th>
-                  <th className="text-right px-3 py-2 font-normal">HR</th>
+                  <th className="text-left px-2 py-2 font-normal">Date</th>
+                  <th className="text-right px-1 py-2 font-normal">Steps</th>
+                  <th className="text-right px-1 py-2 font-normal">Active</th>
+                  <th className="text-right px-1 py-2 font-normal">BMR</th>
+                  <th className="text-right px-1 py-2 font-normal">Total</th>
+                  <th className="text-right px-1 py-2 font-normal">Sleep</th>
+                  <th className="text-right px-2 py-2 font-normal">HR</th>
                 </tr>
               </thead>
               <tbody>
-                {daily.map((d) => (
-                  <tr key={d.id} className="border-t border-zinc-800">
-                    <td className="px-3 py-2 text-zinc-300">{formatShort(d.activity_date)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {fmtNum(d.steps)}
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {fmtNum(d.active_calories, " kcal")}
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {d.sleep_minutes != null
-                        ? `${(d.sleep_minutes / 60).toFixed(1)}h`
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {fmtNum(d.avg_hr)}
-                    </td>
-                  </tr>
-                ))}
+                {daily.map((d) => {
+                  const cb = breakdownByDate.get(d.activity_date);
+                  const tooltip =
+                    cb && !cb.computable
+                      ? cb.reason_if_not === "no_weight_logged"
+                        ? "Log your weight to see total calories burned"
+                        : "Profile incomplete (height/age/sex)"
+                      : undefined;
+                  return (
+                    <tr key={d.id} className="border-t border-zinc-800">
+                      <td className="px-2 py-2 text-zinc-300">
+                        {formatShort(d.activity_date)}
+                      </td>
+                      <td className="px-1 py-2 text-right tabular-nums">
+                        {fmtNum(d.steps)}
+                      </td>
+                      <td className="px-1 py-2 text-right tabular-nums">
+                        {fmtNum(d.active_calories)}
+                      </td>
+                      <td
+                        className="px-1 py-2 text-right tabular-nums text-zinc-400"
+                        title={tooltip}
+                      >
+                        {cb?.computable ? fmtNum(cb.bmr) : "—"}
+                      </td>
+                      <td
+                        className="px-1 py-2 text-right tabular-nums font-medium"
+                        title={tooltip}
+                      >
+                        {cb?.computable ? fmtNum(cb.total) : "—"}
+                      </td>
+                      <td className="px-1 py-2 text-right tabular-nums">
+                        {d.sleep_minutes != null
+                          ? `${(d.sleep_minutes / 60).toFixed(1)}h`
+                          : "—"}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums">
+                        {fmtNum(d.avg_hr)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
