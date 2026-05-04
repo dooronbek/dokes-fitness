@@ -84,7 +84,7 @@ export default async function ActivityPage() {
                   <th className="text-right px-1 py-2 font-normal">BMR</th>
                   <th className="text-right px-1 py-2 font-normal">Total</th>
                   <th className="text-right px-1 py-2 font-normal">Sleep</th>
-                  <th className="text-right px-2 py-2 font-normal">HR</th>
+                  <th className="text-right px-2 py-2 font-normal">Resting HR</th>
                 </tr>
               </thead>
               <tbody>
@@ -125,7 +125,7 @@ export default async function ActivityPage() {
                           : "—"}
                       </td>
                       <td className="px-2 py-2 text-right tabular-nums">
-                        {fmtNum(d.avg_hr)}
+                        {fmtNum(d.resting_hr)}
                       </td>
                     </tr>
                   );

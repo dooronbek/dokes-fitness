@@ -185,7 +185,8 @@ function activityBlock(ctx: CoachContext): string {
 
       if (d.sleep_minutes != null)
         parts.push(`sleep_hours=${(d.sleep_minutes / 60).toFixed(1)}`);
-      if (d.avg_hr != null) parts.push(`avg_hr=${d.avg_hr}`);
+      // Skip d.avg_hr — activity_daily doesn't get continuous HR; the column
+      // is always null and noisy. Workouts have real per-workout avg_hr/max_hr.
       if (d.resting_hr != null) parts.push(`resting_hr=${d.resting_hr}`);
       if (d.hrv_ms != null) parts.push(`hrv_ms=${Number(d.hrv_ms).toFixed(0)}`);
       if (d.exercise_minutes != null) parts.push(`exercise_min=${d.exercise_minutes}`);
