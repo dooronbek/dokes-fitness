@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Profile } from "@/lib/types";
+import { parseDecimalInput } from "@/lib/parse";
 
 const ACTIVITY = [
   "sedentary",
@@ -41,14 +42,21 @@ export default function OnboardingForm({ initial }: { initial: Profile | null })
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setErr(null);
+
+    const height = parseDecimalInput(form.height_cm);
+    if (!height.ok) {
+      setErr("Enter a valid height (e.g. 180 or 180,5).");
+      return;
+    }
+
+    setBusy(true);
     const res = await fetch("/api/profile", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         goals: form.goals.trim() || null,
-        height_cm: form.height_cm ? Number(form.height_cm) : null,
+        height_cm: height.value,
         age: form.age ? Number(form.age) : null,
         sex: form.sex.trim() || null,
         activity_level: form.activity_level || null,
@@ -98,7 +106,7 @@ export default function OnboardingForm({ initial }: { initial: Profile | null })
         <div>
           <label className={labelCls}>Height (cm)</label>
           <input
-            inputMode="numeric"
+            inputMode="decimal"
             value={form.height_cm}
             onChange={(e) => set("height_cm", e.target.value)}
             className={inputCls}

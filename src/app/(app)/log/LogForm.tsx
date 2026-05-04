@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DailyLog } from "@/lib/types";
+import { parseDecimalInput } from "@/lib/parse";
 
 function Scale1to5({
   label,
@@ -65,16 +66,25 @@ export default function LogForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setErr(null);
+
+    const weight = parseDecimalInput(f.weight_kg);
+    const waist = parseDecimalInput(f.waist_cm);
+    const sleep = parseDecimalInput(f.sleep_hours);
+    if (!weight.ok || !waist.ok || !sleep.ok) {
+      setErr("Enter a valid number (e.g. 93.5 or 93,5).");
+      return;
+    }
+
+    setBusy(true);
     const res = await fetch("/api/log", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         log_date: today,
-        weight_kg: f.weight_kg ? Number(f.weight_kg) : null,
-        waist_cm: f.waist_cm ? Number(f.waist_cm) : null,
-        sleep_hours: f.sleep_hours ? Number(f.sleep_hours) : null,
+        weight_kg: weight.value,
+        waist_cm: waist.value,
+        sleep_hours: sleep.value,
         sleep_quality: f.sleep_quality,
         mood: f.mood,
         energy: f.energy,
