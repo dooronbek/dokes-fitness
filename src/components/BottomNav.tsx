@@ -1,0 +1,77 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const TABS: { href: string; label: string; icon: React.ReactNode }[] = [
+  {
+    href: "/",
+    label: "Home",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 11l9-8 9 8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 10v10h14V10" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    href: "/log",
+    label: "Log",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 4h12l4 4v12H4z" strokeLinejoin="round" />
+        <path d="M8 12h8M8 16h8M8 8h6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    href: "/coach",
+    label: "Coach",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 5h16v11H8l-4 4z" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    href: "/plan",
+    label: "Plan",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M6 4v16M18 4v16M6 8l12 0M6 16l12 0" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+];
+
+export default function BottomNav() {
+  const pathname = usePathname();
+  return (
+    <nav
+      className="fixed bottom-0 inset-x-0 z-30 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <ul className="grid grid-cols-4">
+        {TABS.map((t) => {
+          const active =
+            t.href === "/"
+              ? pathname === "/"
+              : pathname === t.href || pathname.startsWith(t.href + "/");
+          return (
+            <li key={t.href}>
+              <Link
+                href={t.href}
+                className={`flex flex-col items-center justify-center gap-0.5 py-2.5 min-h-[56px] text-[11px] ${
+                  active ? "text-zinc-100" : "text-zinc-500"
+                }`}
+              >
+                {t.icon}
+                <span>{t.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}

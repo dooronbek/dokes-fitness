@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="36" fill="#09090b"/>
+  <g fill="none" stroke="#f4f4f5" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="96" cy="96" r="56"/>
+    <path d="M58 96 H134"/>
+    <path d="M70 78 V114"/>
+    <path d="M122 78 V114"/>
+  </g>
+  <text x="96" y="172" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" font-weight="600" fill="#a1a1aa">DOKES</text>
+</svg>
