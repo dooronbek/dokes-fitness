@@ -193,6 +193,23 @@ function num(v: unknown): number | null {
   return null;
 }
 
+// HAE v2 reports workout-level scalars as { qty, units } objects rather
+// than bare numbers. Older shapes (and some daily metrics) still send the
+// scalar directly, so accept both.
+function getQty(v: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "object") {
+    const q = (v as { qty?: unknown }).qty;
+    if (typeof q === "number" && Number.isFinite(q)) return q;
+  }
+  return null;
+}
+
+function roundOrNull(v: number | null): number | null {
+  return v != null ? Math.round(v) : null;
+}
+
 // Extract YYYY-MM-DD from HAE date strings like "2025-11-01 00:00:00 +0000".
 // HAE uses the local-day boundary in UTC for daily metrics, so the date prefix
 // is the calendar day we want.
@@ -519,39 +536,60 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- Workouts ----
+  // HAE v2 workout payload shape (verified from production raw_payload):
+  //   { id, name, start, end, duration (seconds), activeEnergyBurned: {qty, units},
+  //     totalEnergyBurned?: {qty, units}, avgHeartRate: {qty, units},
+  //     maxHeartRate: {qty, units}, heartRate: { avg: {qty,units}, max, min },
+  //     totalDistance?: {qty, units}, ... }
+  // Scalars come as { qty, units } objects, not bare numbers — use getQty.
   let workoutsProcessed = 0;
   for (const w of workouts) {
     try {
       const externalId =
-        typeof w.id === "string" && w.id.trim()
-          ? w.id.trim()
-          : typeof w.uuid === "string"
-          ? (w.uuid as string)
-          : null;
+        typeof w.id === "string" && w.id.trim() ? w.id.trim() : null;
+      if (!externalId) {
+        console.warn(
+          "[health-sync]",
+          new Date().toISOString(),
+          "workout_skipped_no_id",
+          JSON.stringify({ name: w.name, start: w.start })
+        );
+        continue;
+      }
       const startedAt = toISO(w.start);
       if (!startedAt) {
         errors.push({
           kind: "workout",
-          key: externalId ?? "?",
+          key: externalId,
           error: "missing or invalid start",
         });
         continue;
       }
       const endedAt = toISO(w.end);
       const workoutDate = startedAt.slice(0, 10);
-      const durFromTimes =
-        endedAt && startedAt
+
+      const durationSec = typeof w.duration === "number" ? w.duration : null;
+      const durationMin =
+        durationSec != null
+          ? Math.round(durationSec / 60)
+          : endedAt
           ? Math.round(
               (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000
             )
           : null;
-      const duration =
-        num(w.duration) != null ? Math.round(num(w.duration) as number) : durFromTimes;
-      const activeKcal = num(w.activeEnergyBurned ?? w.active_energy);
-      const totalKcal = num(w.totalEnergyBurned ?? w.total_energy);
-      const dist = num(w.totalDistance ?? w.distance);
-      // HAE distance is km — convert to metres.
-      const distM = dist != null ? Math.round(dist * 1000) : null;
+
+      const activeKcal = roundOrNull(getQty(w.activeEnergyBurned));
+      const totalKcal = roundOrNull(getQty(w.totalEnergyBurned));
+
+      const hr = (w as { heartRate?: { avg?: unknown; max?: unknown } }).heartRate;
+      const avgHr = roundOrNull(getQty(w.avgHeartRate) ?? getQty(hr?.avg));
+      const maxHr = roundOrNull(getQty(w.maxHeartRate) ?? getQty(hr?.max));
+
+      // HAE distance is km — convert to metres. May be absent for non-cardio.
+      const distKm = getQty(w.totalDistance);
+      const distanceM = distKm != null ? Math.round(distKm * 1000) : null;
+
+      const type = normalizeWorkoutType(w.name);
 
       const row = {
         external_id: externalId,
@@ -559,35 +597,28 @@ export async function POST(req: NextRequest) {
         workout_date: workoutDate,
         started_at: startedAt,
         ended_at: endedAt,
-        type: normalizeWorkoutType(w.name),
-        duration_min: duration,
-        active_calories: activeKcal != null ? Math.round(activeKcal) : null,
-        total_calories: totalKcal != null ? Math.round(totalKcal) : null,
-        distance_m: distM,
-        avg_hr:
-          num(w.avgHeartRate ?? w.avg_heart_rate) != null
-            ? Math.round(num(w.avgHeartRate ?? w.avg_heart_rate) as number)
-            : null,
-        max_hr:
-          num(w.maxHeartRate ?? w.max_heart_rate) != null
-            ? Math.round(num(w.maxHeartRate ?? w.max_heart_rate) as number)
-            : null,
+        type,
+        duration_min: durationMin,
+        active_calories: activeKcal,
+        total_calories: totalKcal,
+        distance_m: distanceM,
+        avg_hr: avgHr,
+        max_hr: maxHr,
         notes: typeof w.notes === "string" ? w.notes : null,
         raw_payload: w,
         synced_at: new Date().toISOString(),
       };
 
-      if (externalId) {
-        const { error } = await sb
-          .from("workouts")
-          .upsert(row, { onConflict: "external_id" });
-        if (error) throw new Error(error.message);
-      } else {
-        // Without a stable id, fall back to insert; risk of duplicates if HAE
-        // re-sends, but better than dropping the workout.
-        const { error } = await sb.from("workouts").insert(row);
-        if (error) throw new Error(error.message);
-      }
+      const { error } = await sb
+        .from("workouts")
+        .upsert(row, { onConflict: "external_id" });
+      if (error) throw new Error(error.message);
+
+      console.log(
+        "[health-sync]",
+        new Date().toISOString(),
+        `workout_processed external_id=${externalId} type=${type} duration_min=${durationMin} active_kcal=${activeKcal} avg_hr=${avgHr} max_hr=${maxHr}`
+      );
       workoutsProcessed++;
     } catch (e) {
       errors.push({
