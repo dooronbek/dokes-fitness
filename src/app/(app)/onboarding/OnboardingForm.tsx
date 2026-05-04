@@ -81,7 +81,7 @@ export default function OnboardingForm({ initial }: { initial: Profile | null })
       setBusy(false);
       return;
     }
-    router.replace("/");
+    router.replace("/knowledge?welcome=1");
     router.refresh();
   }
 

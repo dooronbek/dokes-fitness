@@ -84,5 +84,23 @@ create table if not exists public.coach_messages (
 );
 create index if not exists coach_messages_created_at_idx on public.coach_messages (created_at);
 
+create table if not exists public.coach_knowledge (
+  id              integer primary key default 1,
+  background      text,
+  current_state   text,
+  personal_records text,
+  goals_short_term text,
+  goals_long_term  text,
+  injuries        text,
+  constraints     text,
+  diet_reality    text,
+  preferences     text,
+  lifestyle       text,
+  freeform        text,
+  updated_at      timestamptz not null default now(),
+  check (id = 1)
+);
+insert into public.coach_knowledge (id) values (1) on conflict (id) do nothing;
+
 -- Force PostgREST to reload its schema cache (fixes PGRST205 after DDL).
 notify pgrst, 'reload schema';

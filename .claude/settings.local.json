@@ -4,7 +4,18 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/knowledge)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/api/knowledge)",
+      "Bash(findstr /v ANTHROPIC)",
+      "Bash(findstr /v SUPABASE)",
+      "Bash(curl -s -c /tmp/cookies.txt -b /tmp/cookies.txt -X POST -H \"content-type: application/json\" -d '{\"password\":\"dokesfitness2026\"}' http://localhost:3000/api/login -o /tmp/login.out -w \"login=%{http_code}\\\\n\")",
+      "Bash(curl -s -b /tmp/cookies.txt -o /tmp/k.out -w \"GET /api/knowledge=%{http_code}\\\\n\" http://localhost:3000/api/knowledge)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -b /tmp/cookies.txt -o /tmp/p.out -w \"GET /knowledge=%{http_code}\\\\n\" http://localhost:3000/knowledge)",
+      "Bash(curl -s -b /tmp/cookies.txt -o /dev/null -w '%{http_code}' http://localhost:3000__TRACKED_VAR__)",
+      "Bash(curl -s -b /tmp/cookies.txt http://localhost:3000/)"
     ]
   }
 }

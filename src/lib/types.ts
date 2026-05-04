@@ -82,3 +82,19 @@ export type CoachMessage = {
   content: string;
   created_at?: string;
 };
+
+export type CoachKnowledge = {
+  id: number;
+  background: string | null;
+  current_state: string | null;
+  personal_records: string | null;
+  goals_short_term: string | null;
+  goals_long_term: string | null;
+  injuries: string | null;
+  constraints: string | null;
+  diet_reality: string | null;
+  preferences: string | null;
+  lifestyle: string | null;
+  freeform: string | null;
+  updated_at: string;
+};
