@@ -30,28 +30,6 @@ export const dynamic = "force-dynamic";
 // or malicious huge bodies regardless of platform limits.
 const MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB
 
-// Map of HAE metric name -> handler that pulls a numeric value out of one
-// daily data point and assigns it to the activity_daily row.
-type DayRow = {
-  activity_date: string;
-  source: string;
-  steps?: number | null;
-  active_calories?: number | null;
-  resting_calories?: number | null;
-  total_calories?: number | null;
-  distance_m?: number | null;
-  floors_climbed?: number | null;
-  exercise_minutes?: number | null;
-  stand_hours?: number | null;
-  avg_hr?: number | null;
-  resting_hr?: number | null;
-  hrv_ms?: number | null;
-  sleep_minutes?: number | null;
-  sleep_quality_score?: number | null;
-  raw_payload: Record<string, unknown>;
-  synced_at: string;
-};
-
 type MetricPoint = Record<string, unknown> & { date?: string };
 
 type Metric = {
@@ -67,56 +45,122 @@ type WorkoutInput = Record<string, unknown> & {
   end?: string;
 };
 
-const METRIC_HANDLERS: Record<
+// One HAE metric entry (a single object in v2 flat shape, or one item in
+// the legacy `data: [...]` array). Carries arbitrary fields plus an
+// optional `qty` and `date`.
+type MetricEntry = Record<string, unknown> & {
+  qty?: unknown;
+  date?: unknown;
+};
+
+// Numeric columns on activity_daily that a metric can populate.
+type DayColumn =
+  | "steps"
+  | "active_calories"
+  | "resting_calories"
+  | "distance_m"
+  | "floors_climbed"
+  | "exercise_minutes"
+  | "stand_hours"
+  | "avg_hr"
+  | "resting_hr"
+  | "hrv_ms"
+  | "sleep_minutes";
+
+// Metric name -> { destination column, transform from one entry to the
+// numeric column value }. Single source of truth for both v2 flat and
+// legacy array shapes.
+const METRIC_MAP: Record<
   string,
-  (row: DayRow, point: MetricPoint) => void
+  { column: DayColumn; transform: (v: MetricEntry) => number | null }
 > = {
-  step_count: (row, p) => {
-    const v = num(p.qty);
-    if (v != null) row.steps = Math.round(v);
+  step_count: {
+    column: "steps",
+    transform: (v) => {
+      const q = num(v.qty);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  active_energy: (row, p) => {
-    const v = num(p.qty);
-    if (v != null) row.active_calories = Math.round(v);
+  active_energy: {
+    column: "active_calories",
+    transform: (v) => {
+      const q = num(v.qty);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  basal_energy_burned: (row, p) => {
-    const v = num(p.qty);
-    if (v != null) row.resting_calories = Math.round(v);
+  basal_energy_burned: {
+    column: "resting_calories",
+    transform: (v) => {
+      const q = num(v.qty);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  // Distance comes in km from HAE typically; convert to metres.
-  distance_walking_running: (row, p) => {
-    const v = num(p.qty);
-    if (v != null) row.distance_m = Math.round(v * 1000);
+  // HAE reports distance in km — convert to metres.
+  distance_walking_running: {
+    column: "distance_m",
+    transform: (v) => {
+      const q = num(v.qty);
+      return q != null ? Math.round(q * 1000) : null;
+    },
   },
-  flights_climbed: (row, p) => {
-    const v = num(p.qty);
-    if (v != null) row.floors_climbed = Math.round(v);
+  flights_climbed: {
+    column: "floors_climbed",
+    transform: (v) => {
+      const q = num(v.qty);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  apple_exercise_time: (row, p) => {
-    const v = num(p.qty);
-    if (v != null) row.exercise_minutes = Math.round(v);
+  apple_exercise_time: {
+    column: "exercise_minutes",
+    transform: (v) => {
+      const q = num(v.qty);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  apple_stand_hour: (row, p) => {
-    const v = num(p.qty);
-    if (v != null) row.stand_hours = Math.round(v);
+  apple_stand_hour: {
+    column: "stand_hours",
+    transform: (v) => {
+      const q = num(v.qty);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  heart_rate: (row, p) => {
-    const v = num(p.Avg ?? p.avg ?? p.qty);
-    if (v != null) row.avg_hr = Math.round(v);
+  // Legacy array shape uses Avg/avg; v2 flat uses qty.
+  heart_rate: {
+    column: "avg_hr",
+    transform: (v) => {
+      const q = num(v.Avg ?? v.avg ?? v.qty);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  resting_heart_rate: (row, p) => {
-    const v = num(p.Avg ?? p.avg ?? p.qty);
-    if (v != null) row.resting_hr = Math.round(v);
+  resting_heart_rate: {
+    column: "resting_hr",
+    transform: (v) => {
+      const q = num(v.qty ?? v.Avg ?? v.avg);
+      return q != null ? Math.round(q) : null;
+    },
   },
-  heart_rate_variability: (row, p) => {
-    const v = num(p.qty ?? p.Avg ?? p.avg);
-    if (v != null) row.hrv_ms = v;
+  heart_rate_variability: {
+    column: "hrv_ms",
+    transform: (v) => num(v.qty ?? v.Avg ?? v.avg),
   },
-  sleep_analysis: (row, p) => {
-    // HAE reports sleep in hours under "asleep" (and "inBed").
-    const asleep = num(p.asleep ?? p.qty);
-    if (asleep != null) row.sleep_minutes = Math.round(asleep * 60);
+  // Sleep: v2 flat carries totalSleep/asleep/inBed/rem/deep/etc. as hours.
+  // Prefer totalSleep (matches Apple Health "Time Asleep"), fall back to
+  // asleep, then qty for older shapes.
+  sleep_analysis: {
+    column: "sleep_minutes",
+    transform: (v) => {
+      const hours = num(v.totalSleep) ?? num(v.asleep) ?? num(v.qty);
+      return hours != null ? Math.round(hours * 60) : null;
+    },
   },
+};
+
+// Aggregated per-day data, populated from either payload shape and then
+// upserted to activity_daily.
+type DayAggregate = {
+  date: string;
+  columns: Partial<Record<DayColumn | "total_calories", number>>;
+  raw: Record<string, unknown>;
 };
 
 // Lowercase normalised workout type lookup.
@@ -184,6 +228,104 @@ function logSummary(payload: Record<string, unknown>) {
     new Date().toISOString(),
     JSON.stringify(payload)
   );
+}
+
+// Apply one (metric name, entry, date) tuple to the per-day aggregate map,
+// recording unknown metric names without failing the request.
+function applyMetric(
+  byDate: Map<string, DayAggregate>,
+  unknown: { name: string; preview: string }[],
+  name: string,
+  entry: MetricEntry,
+  date: string
+) {
+  const mapping = METRIC_MAP[name];
+  if (!mapping) {
+    unknown.push({
+      name,
+      preview: JSON.stringify(entry).slice(0, 100),
+    });
+    return;
+  }
+  let agg = byDate.get(date);
+  if (!agg) {
+    agg = { date, columns: {}, raw: {} };
+    byDate.set(date, agg);
+  }
+  // Always stash the raw entry under its metric name so raw_payload always
+  // reflects the latest sync, even if the transform returns null.
+  agg.raw[name] = entry;
+  const value = mapping.transform(entry);
+  if (value != null) agg.columns[mapping.column] = value;
+}
+
+// HAE has shipped two payload shapes from the iOS app:
+//
+//   1. Legacy "array" shape (REST API v1, older HAE versions):
+//        { "data": { "metrics": [{name, units, data: [{date, qty, ...}]}], "workouts": [...] } }
+//
+//   2. v2 flat shape (Summarize Data + Time Grouping = Day):
+//        { "step_count": {qty, date, source}, "active_energy": {...}, "sleep_analysis": {totalSleep, ...}, ... }
+//      Each top-level key is a metric name; its value is a single per-day
+//      object (not an array). Workouts, when present, still appear under a
+//      top-level "workouts" key.
+//
+// This normalizer detects which shape the body is in and routes both into
+// the same per-date aggregate so downstream upsert logic is shape-agnostic.
+function normalizeMetrics(body: unknown): {
+  byDate: Map<string, DayAggregate>;
+  unknown: { name: string; preview: string }[];
+  workouts: WorkoutInput[];
+} {
+  const byDate = new Map<string, DayAggregate>();
+  const unknown: { name: string; preview: string }[] = [];
+  let workouts: WorkoutInput[] = [];
+
+  if (!body || typeof body !== "object") return { byDate, unknown, workouts };
+
+  // ---- Shape 1: { data: { metrics: [...], workouts: [...] } } ----
+  const legacy = (body as { data?: { metrics?: Metric[]; workouts?: WorkoutInput[] } })
+    .data;
+  if (
+    legacy &&
+    typeof legacy === "object" &&
+    (Array.isArray(legacy.metrics) || Array.isArray(legacy.workouts))
+  ) {
+    workouts = Array.isArray(legacy.workouts) ? legacy.workouts : [];
+    const metrics = Array.isArray(legacy.metrics) ? legacy.metrics : [];
+    for (const metric of metrics) {
+      const name = metric?.name;
+      if (!name) continue;
+      const points = Array.isArray(metric.data) ? metric.data : [];
+      for (const p of points) {
+        const date = extractDate(p?.date);
+        if (!date) continue;
+        applyMetric(byDate, unknown, name, p as MetricEntry, date);
+      }
+    }
+    return { byDate, unknown, workouts };
+  }
+
+  // ---- Shape 2: flat top-level metric-name keys ----
+  const obj = body as Record<string, unknown>;
+  if (Array.isArray(obj.workouts)) workouts = obj.workouts as WorkoutInput[];
+  for (const [name, value] of Object.entries(obj)) {
+    if (name === "workouts" || name === "data") continue;
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const entry = value as MetricEntry;
+    const date = extractDate(entry.date);
+    if (!date) {
+      // No date on the entry — can't bucket it. Note as unknown shape so we
+      // can investigate if it ever happens.
+      unknown.push({
+        name: `${name} (no date)`,
+        preview: JSON.stringify(entry).slice(0, 100),
+      });
+      continue;
+    }
+    applyMetric(byDate, unknown, name, entry, date);
+  }
+  return { byDate, unknown, workouts };
 }
 
 // Manually stream the request body to avoid Next's built-in body parser,
@@ -297,75 +439,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const data =
-    (body as { data?: { metrics?: Metric[]; workouts?: WorkoutInput[] } })?.data ?? {};
-  const metrics = Array.isArray(data.metrics) ? data.metrics : [];
-  const workouts = Array.isArray(data.workouts) ? data.workouts : [];
+  // Normalize whichever HAE payload shape we got (legacy array OR v2 flat)
+  // into a unified per-date aggregate map.
+  const { byDate, unknown: unknownMetrics, workouts } = normalizeMetrics(body);
 
   const sb = supabaseServer();
   const errors: { kind: string; key?: string; error: string }[] = [];
 
-  // ---- Build per-day rows from metrics ----
-  const byDate = new Map<string, DayRow>();
-  for (const metric of metrics) {
-    const handler = metric?.name ? METRIC_HANDLERS[metric.name] : null;
-    if (!handler) continue;
-    const points = Array.isArray(metric.data) ? metric.data : [];
-    for (const p of points) {
-      const date = extractDate(p?.date);
-      if (!date) continue;
-      let row = byDate.get(date);
-      if (!row) {
-        row = {
-          activity_date: date,
-          source: "apple_health",
-          raw_payload: {},
-          synced_at: new Date().toISOString(),
-        };
-        byDate.set(date, row);
-      }
-      try {
-        handler(row, p);
-        // Stash raw point in raw_payload by metric name.
-        const rp = row.raw_payload as Record<string, unknown>;
-        rp[metric.name as string] = p;
-      } catch (e) {
-        errors.push({
-          kind: "metric",
-          key: `${metric.name}@${date}`,
-          error: (e as Error).message,
-        });
-      }
-    }
-  }
-
   // Compute total_calories where both sides are present.
-  for (const row of byDate.values()) {
-    if (row.active_calories != null && row.resting_calories != null) {
-      row.total_calories = row.active_calories + row.resting_calories;
+  for (const agg of byDate.values()) {
+    const ac = agg.columns.active_calories;
+    const rc = agg.columns.resting_calories;
+    if (ac != null && rc != null) {
+      agg.columns.total_calories = ac + rc;
     }
   }
 
   // ---- Upsert each day individually so a partial failure doesn't kill batch ----
+  // Read-merge-write pattern: pull the existing row, overlay only the
+  // non-null columns from this sync, deep-merge raw_payload, and bump
+  // synced_at. HAE retries are safe because (activity_date, source) is the
+  // upsert key.
   let daysProcessed = 0;
-  for (const [date, row] of byDate) {
+  const perDateLog: { date: string; mapped: Record<string, number> }[] = [];
+  const SOURCE = "apple_health";
+  const syncedAt = new Date().toISOString();
+
+  for (const [date, agg] of byDate) {
     try {
-      // Read existing row to merge non-null incoming over existing.
       const { data: existing, error: selErr } = await sb
         .from("activity_daily")
         .select("*")
         .eq("activity_date", date)
-        .eq("source", row.source)
+        .eq("source", SOURCE)
         .maybeSingle();
       if (selErr) throw new Error(selErr.message);
 
-      const merged: Record<string, unknown> = { ...(existing ?? {}), ...withoutNullish(row) };
-      // Always overwrite synced_at and merge raw_payload.
       const existingRaw = (existing?.raw_payload ?? {}) as Record<string, unknown>;
-      merged.raw_payload = { ...existingRaw, ...row.raw_payload };
-      merged.activity_date = date;
-      merged.source = row.source;
-      merged.synced_at = row.synced_at;
+      const merged: Record<string, unknown> = {
+        ...(existing ?? {}),
+        ...agg.columns,
+        activity_date: date,
+        source: SOURCE,
+        synced_at: syncedAt,
+        raw_payload: { ...existingRaw, ...agg.raw },
+      };
       delete merged.id;
 
       const { error: upErr } = await sb
@@ -373,9 +491,31 @@ export async function POST(req: NextRequest) {
         .upsert(merged, { onConflict: "activity_date,source" });
       if (upErr) throw new Error(upErr.message);
       daysProcessed++;
+      perDateLog.push({ date, mapped: { ...agg.columns } as Record<string, number> });
     } catch (e) {
       errors.push({ kind: "day", key: date, error: (e as Error).message });
     }
+  }
+
+  // One sync_summary line per date, formatted to be readable in Vercel logs.
+  for (const entry of perDateLog) {
+    console.log(
+      "[health-sync]",
+      syncedAt,
+      `sync_summary date=${entry.date}`,
+      `mapped=${JSON.stringify(entry.mapped)}`,
+      `unknown=${JSON.stringify(unknownMetrics.map((u) => u.name))}`
+    );
+  }
+  // Detailed unknown-metric warnings (with a preview of the value) so we can
+  // extend METRIC_MAP later when HAE adds new metric names.
+  for (const u of unknownMetrics) {
+    console.warn(
+      "[health-sync]",
+      syncedAt,
+      "unknown_metric",
+      JSON.stringify(u)
+    );
   }
 
   // ---- Workouts ----
@@ -470,12 +610,4 @@ export async function POST(req: NextRequest) {
     workouts_processed: workoutsProcessed,
     errors,
   });
-}
-
-function withoutNullish<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  const out: Partial<T> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== null && v !== undefined) (out as Record<string, unknown>)[k] = v;
-  }
-  return out;
 }
