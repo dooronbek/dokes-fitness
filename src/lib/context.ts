@@ -1,13 +1,14 @@
 import { supabaseServer } from "./supabase";
 import { daysAgoISO, todayISO } from "./dates";
 import type {
-  Activity,
+  ActivityDaily,
   CoachKnowledge,
   CoachMessage,
   DailyLog,
   Meal,
   Profile,
   TrainingPlan,
+  Workout,
 } from "./types";
 
 export type CoachContext = {
@@ -16,7 +17,8 @@ export type CoachContext = {
   today: string;
   recent_logs: DailyLog[];
   recent_meals: Meal[];
-  recent_activity: Activity[];
+  recent_activity: ActivityDaily[];
+  recent_workouts: Workout[];
   yesterday_plan: TrainingPlan | null;
   recent_messages: CoachMessage[];
 };
@@ -28,6 +30,7 @@ export async function loadCoachContext(opts?: {
   const sb = supabaseServer();
   const today = todayISO();
   const since = daysAgoISO(7);
+  const since14 = daysAgoISO(13);
   const yesterday = daysAgoISO(1);
 
   const [
@@ -36,6 +39,7 @@ export async function loadCoachContext(opts?: {
     logsRes,
     mealsRes,
     activityRes,
+    workoutsRes,
     yPlanRes,
     msgsRes,
   ] = await Promise.all([
@@ -52,10 +56,15 @@ export async function loadCoachContext(opts?: {
       .gte("meal_date", since)
       .order("created_at", { ascending: true }),
     sb
-      .from("activity")
+      .from("activity_daily")
       .select("*")
-      .gte("activity_date", since)
+      .gte("activity_date", since14)
       .order("activity_date", { ascending: true }),
+    sb
+      .from("workouts")
+      .select("*")
+      .gte("workout_date", since14)
+      .order("started_at", { ascending: true }),
     sb
       .from("training_plans")
       .select("*")
@@ -72,13 +81,30 @@ export async function loadCoachContext(opts?: {
 
   const recent_messages = (msgsRes.data ?? []).slice().reverse() as CoachMessage[];
 
+  // If multiple sources land on the same date, keep the most recently synced row.
+  const dailyByDate = new Map<string, ActivityDaily>();
+  for (const r of (activityRes.data ?? []) as ActivityDaily[]) {
+    const existing = dailyByDate.get(r.activity_date);
+    if (!existing) {
+      dailyByDate.set(r.activity_date, r);
+    } else {
+      const a = existing.synced_at ?? "";
+      const b = r.synced_at ?? "";
+      if (b > a) dailyByDate.set(r.activity_date, r);
+    }
+  }
+  const recent_activity = Array.from(dailyByDate.values()).sort((a, b) =>
+    a.activity_date.localeCompare(b.activity_date)
+  );
+
   return {
     profile: (profileRes.data ?? null) as Profile | null,
     knowledge: (knowledgeRes.data ?? null) as CoachKnowledge | null,
     today,
     recent_logs: (logsRes.data ?? []) as DailyLog[],
     recent_meals: (mealsRes.data ?? []) as Meal[],
-    recent_activity: (activityRes.data ?? []) as Activity[],
+    recent_activity,
+    recent_workouts: (workoutsRes.data ?? []) as Workout[],
     yesterday_plan: (yPlanRes.data ?? null) as TrainingPlan | null,
     recent_messages,
   };
@@ -122,6 +148,43 @@ export function knowledgeBlock(
   ].join("\n\n");
 }
 
+function activityBlock(ctx: CoachContext): string {
+  const lines: string[] = ["## ACTIVITY DATA (last 14 days)", "(from Bip 6 / Apple Health)", ""];
+  lines.push("### Daily summaries");
+  if (ctx.recent_activity.length === 0) {
+    lines.push("(no data yet)");
+  } else {
+    for (const d of ctx.recent_activity) {
+      const parts: string[] = [];
+      if (d.steps != null) parts.push(`steps=${d.steps}`);
+      if (d.active_calories != null) parts.push(`active_kcal=${d.active_calories}`);
+      if (d.sleep_minutes != null)
+        parts.push(`sleep_hours=${(d.sleep_minutes / 60).toFixed(1)}`);
+      if (d.avg_hr != null) parts.push(`avg_hr=${d.avg_hr}`);
+      if (d.resting_hr != null) parts.push(`resting_hr=${d.resting_hr}`);
+      if (d.hrv_ms != null) parts.push(`hrv_ms=${Number(d.hrv_ms).toFixed(0)}`);
+      if (d.exercise_minutes != null) parts.push(`exercise_min=${d.exercise_minutes}`);
+      lines.push(`${d.activity_date}: ${parts.join(", ") || "(empty)"}`);
+    }
+  }
+  lines.push("");
+  lines.push("### Workouts");
+  if (ctx.recent_workouts.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const w of ctx.recent_workouts) {
+      const bits: string[] = [];
+      if (w.duration_min != null) bits.push(`${w.duration_min} min`);
+      const kcal = w.active_calories ?? w.total_calories;
+      if (kcal != null) bits.push(`${kcal} kcal`);
+      if (w.avg_hr != null) bits.push(`avg HR ${w.avg_hr}`);
+      if (w.distance_m != null) bits.push(`${(w.distance_m / 1000).toFixed(2)} km`);
+      lines.push(`${w.workout_date} ${w.type ?? "workout"} - ${bits.join(", ") || "(no metrics)"}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 // Build a compact, structured context block for the model.
 // Always JSON for the recent data so the model parses precisely; the
 // long-term knowledge dossier is rendered as labelled markdown sections.
@@ -157,15 +220,6 @@ export function contextBlock(ctx: CoachContext): string {
       fat_g: m.fat_g,
       desc: m.description,
     })),
-    recent_activity: ctx.recent_activity.map((a) => ({
-      date: a.activity_date,
-      type: a.type,
-      duration_min: a.duration_min,
-      calories: a.calories,
-      steps: a.steps,
-      avg_hr: a.avg_hr,
-      source: a.source,
-    })),
     yesterday_plan: ctx.yesterday_plan && {
       focus: ctx.yesterday_plan.focus,
       total_minutes: ctx.yesterday_plan.total_minutes,
@@ -178,8 +232,9 @@ export function contextBlock(ctx: CoachContext): string {
     "## RECENT DATA (last 7 days)\n<context>\n" +
     JSON.stringify(slim, null, 2) +
     "\n</context>";
+  const activity = activityBlock(ctx);
   const dossier = knowledgeBlock(ctx.knowledge);
-  return dossier ? `${dossier}\n\n${recent}` : recent;
+  return [dossier, activity, recent].filter((s) => s).join("\n\n");
 }
 
 export function coachSystemPrompt(ctx: CoachContext): string {
@@ -190,7 +245,8 @@ export function coachSystemPrompt(ctx: CoachContext): string {
     "You are Dokes, a personal AI fitness and nutrition coach for a single user.",
     `Coaching style: ${style}.`,
     "The LONG-TERM KNOWLEDGE section reflects facts about this person that are stable over time — treat it as ground truth.",
-    "The RECENT DATA section reflects the last 7-14 days of logged behavior (profile, daily logs, meals, activity, yesterday's plan). Use both.",
+    "The ACTIVITY DATA section reflects what the user actually did per their watch/phone (steps, sleep, HR, workouts). If they say 'I trained yesterday' but no workout is in ACTIVITY DATA from yesterday, gently flag the discrepancy. If they ask about training and ACTIVITY DATA is empty, mention they should set up Health Auto Export to give you better signal.",
+    "The RECENT DATA section reflects the last 7-14 days of logged behavior (profile, daily logs, meals, yesterday's plan). Use all three sources together.",
     "If long-term knowledge contradicts a single recent data point (e.g., user noted today they're bored of an exercise they previously listed as a favorite), prefer the recent data but acknowledge the shift.",
     "Be specific. Reference actual numbers from the context when relevant. Do not invent data that isn't there.",
     "Mobile chat — keep replies short. Bullet points over paragraphs. No filler preambles.",

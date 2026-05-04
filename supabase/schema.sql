@@ -62,19 +62,53 @@ create table if not exists public.training_plans (
   created_at        timestamptz not null default now()
 );
 
-create table if not exists public.activity (
+drop table if exists public.activity cascade;
+
+-- Daily activity summaries (one row per day, source)
+create table if not exists public.activity_daily (
   id              bigserial primary key,
   activity_date   date not null,
-  source          text,           -- 'bip6', 'apple_health', 'manual', etc
-  type            text,
-  duration_min    integer,
-  calories        integer,
+  source          text not null default 'apple_health',
   steps           integer,
+  active_calories integer,
+  resting_calories integer,
+  total_calories  integer,
+  distance_m      integer,
+  floors_climbed  integer,
+  exercise_minutes integer,
+  stand_hours     integer,
   avg_hr          integer,
-  notes           text,
-  created_at      timestamptz not null default now()
+  resting_hr      integer,
+  hrv_ms          numeric,
+  sleep_minutes   integer,
+  sleep_quality_score integer,
+  raw_payload     jsonb,
+  synced_at       timestamptz not null default now(),
+  unique (activity_date, source)
 );
-create index if not exists activity_date_idx on public.activity (activity_date);
+create index if not exists activity_daily_date_idx on public.activity_daily (activity_date desc);
+
+-- Individual workouts (one row per workout)
+create table if not exists public.workouts (
+  id              bigserial primary key,
+  external_id     text unique,           -- stable ID from source for idempotency
+  source          text not null default 'apple_health',
+  workout_date    date not null,
+  started_at      timestamptz not null,
+  ended_at        timestamptz,
+  type            text,                  -- 'running', 'strength', 'walking', etc
+  duration_min    integer,
+  active_calories integer,
+  total_calories  integer,
+  distance_m      integer,
+  avg_hr          integer,
+  max_hr          integer,
+  notes           text,
+  raw_payload     jsonb,
+  synced_at       timestamptz not null default now()
+);
+create index if not exists workouts_date_idx on public.workouts (workout_date desc);
+create index if not exists workouts_started_idx on public.workouts (started_at desc);
 
 create table if not exists public.coach_messages (
   id              bigserial primary key,

@@ -43,12 +43,11 @@ const TABS: { href: string; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
-    href: "/knowledge",
-    label: "Knowledge",
+    href: "/activity",
+    label: "Activity",
     icon: (
       <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v16H5.5A1.5 1.5 0 0 0 4 20.5z" strokeLinejoin="round" />
-        <path d="M4 17.5A1.5 1.5 0 0 1 5.5 16H20" strokeLinecap="round" />
+        <path d="M3 12h4l3-7 4 14 3-7h4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },

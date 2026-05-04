@@ -21,13 +21,14 @@ type PlanJSON = {
 
 const SYSTEM = `You design today's training session for a single user.
 
-Two sources of context come in the user message:
+Three sources of context come in the user message:
 - LONG-TERM KNOWLEDGE (markdown sections): stable facts about this person — background, PRs, goals, injuries, equipment constraints, preferences, lifestyle. Treat as ground truth.
-- RECENT DATA (<context> JSON): last 7 days of profile, daily logs, meals, activity, and yesterday's plan + completion.
+- ACTIVITY DATA (last 14 days from watch/phone): daily steps, sleep, HR, HRV, plus actual workouts. This is what the user truly did, not just what they said.
+- RECENT DATA (<context> JSON): last 7 days of profile, daily logs, meals, and yesterday's plan + completion.
 
-Use both. If long-term knowledge contradicts a single recent data point, prefer the recent data but acknowledge the shift.
+Use all three. If ACTIVITY DATA is empty, mention briefly that connecting Health Auto Export would let you plan better recovery-aware sessions. If long-term knowledge contradicts a single recent data point, prefer the recent data but acknowledge the shift.
 
-Adapt to recovery: poor sleep, low mood/energy, high soreness → lighter session or active recovery. Crushing it → progress load. Avoid hammering the same body parts as yesterday if soreness is reported. Respect injuries (from long-term knowledge AND profile.injuries_notes) and equipment constraints.
+Adapt to recovery using ACTIVITY DATA + daily logs together: poor sleep, low HRV, high resting HR, low mood/energy, high soreness, or hard workouts in the last 24-48h → lighter session or active recovery. Long stretch with no workouts and good sleep → progress load. Avoid hammering body parts that were trained recently per ACTIVITY DATA workouts. Respect injuries (from long-term knowledge AND profile.injuries_notes) and equipment constraints.
 
 Return TWO things in this exact format:
 

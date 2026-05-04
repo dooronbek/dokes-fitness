@@ -64,16 +64,44 @@ export type PlanExercise = {
   notes?: string;
 };
 
-export type Activity = {
+export type ActivityDaily = {
   id?: number;
   activity_date: string;
-  source: string | null;
+  source: string;
+  steps: number | null;
+  active_calories: number | null;
+  resting_calories: number | null;
+  total_calories: number | null;
+  distance_m: number | null;
+  floors_climbed: number | null;
+  exercise_minutes: number | null;
+  stand_hours: number | null;
+  avg_hr: number | null;
+  resting_hr: number | null;
+  hrv_ms: number | null;
+  sleep_minutes: number | null;
+  sleep_quality_score: number | null;
+  raw_payload?: unknown;
+  synced_at?: string;
+};
+
+export type Workout = {
+  id?: number;
+  external_id: string | null;
+  source: string;
+  workout_date: string;
+  started_at: string;
+  ended_at: string | null;
   type: string | null;
   duration_min: number | null;
-  calories: number | null;
-  steps: number | null;
+  active_calories: number | null;
+  total_calories: number | null;
+  distance_m: number | null;
   avg_hr: number | null;
+  max_hr: number | null;
   notes: string | null;
+  raw_payload?: unknown;
+  synced_at?: string;
 };
 
 export type CoachMessage = {

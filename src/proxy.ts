@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthedFromRequest } from "@/lib/auth";
 
 const PUBLIC_PATHS = new Set<string>(["/login"]);
-const PUBLIC_API = new Set<string>(["/api/login"]);
+const PUBLIC_API = new Set<string>(["/api/login", "/api/health-sync"]);
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
