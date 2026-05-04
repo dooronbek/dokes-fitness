@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthedFromRequest } from "@/lib/auth";
-import { MEAL_BUCKET, supabaseServer } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase";
 import { anthropic, MODEL, extractJSON, extractText } from "@/lib/anthropic";
 import { todayISO } from "@/lib/dates";
 
 export const runtime = "nodejs";
-// Photos can be a few MB; bump body parsing isn't needed for FormData but Vercel
-// route default of 4.5MB should be fine for resized phone photos.
+// Photos are sent to Claude vision in-memory and discarded — never persisted to
+// Supabase Storage. The photo_url column is left null but kept in the schema.
 
 type VisionResult = {
   description?: string;
@@ -53,7 +53,6 @@ export async function POST(req: NextRequest) {
   type ImgMime = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
   const ALLOWED: ImgMime[] = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-  let photoUrl: string | null = null;
   let imagePart: { type: "base64"; media_type: ImgMime; data: string } | null = null;
 
   if (photo instanceof File && photo.size > 0) {
@@ -62,16 +61,6 @@ export async function POST(req: NextRequest) {
     const mime: ImgMime = (ALLOWED as string[]).includes(rawMime)
       ? (rawMime as ImgMime)
       : "image/jpeg";
-    const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-    const path = `${today}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error: upErr } = await sb.storage
-      .from(MEAL_BUCKET)
-      .upload(path, buf, { contentType: mime, upsert: false });
-    if (upErr) {
-      return NextResponse.json({ error: `upload: ${upErr.message}` }, { status: 500 });
-    }
-    const { data: pub } = sb.storage.from(MEAL_BUCKET).getPublicUrl(path);
-    photoUrl = pub.publicUrl;
     imagePart = {
       type: "base64",
       media_type: mime,
@@ -115,7 +104,7 @@ export async function POST(req: NextRequest) {
   const row = {
     meal_date: today,
     eaten_at: new Date().toISOString(),
-    photo_url: photoUrl,
+    photo_url: null,
     user_text: userText,
     description: parsed.description ?? null,
     calories: typeof parsed.calories === "number" ? Math.round(parsed.calories) : null,

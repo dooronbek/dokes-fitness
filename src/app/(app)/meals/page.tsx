@@ -69,16 +69,6 @@ export default async function MealsPage() {
             key={m.id}
             className="rounded-2xl bg-zinc-900/70 border border-zinc-800 overflow-hidden"
           >
-            {m.photo_url && (
-              // Using <img> intentionally — meal photos are user-uploaded blobs
-              // from Supabase Storage; sizing is fluid.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={m.photo_url}
-                alt={m.description ?? "Meal"}
-                className="w-full max-h-64 object-cover"
-              />
-            )}
             <div className="p-4 flex flex-col gap-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -103,6 +93,9 @@ export default async function MealsPage() {
                 <div>C {num(m.carbs_g)}g</div>
                 <div>F {num(m.fat_g)}g</div>
               </div>
+              {m.user_text && m.user_text !== m.description && (
+                <p className="text-xs text-zinc-300 leading-relaxed">“{m.user_text}”</p>
+              )}
               {m.ai_notes && (
                 <p className="text-xs text-zinc-500 leading-relaxed">{m.ai_notes}</p>
               )}
