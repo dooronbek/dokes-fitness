@@ -167,9 +167,19 @@ function activityBlock(ctx: CoachContext): string {
     for (const d of ctx.recent_activity) {
       const parts: string[] = [];
       if (d.steps != null) parts.push(`steps=${d.steps}`);
-      if (d.active_calories != null) parts.push(`active_kcal=${d.active_calories}`);
 
       const cb = breakdownByDate.get(d.activity_date);
+      const activeKcal = cb?.active ?? d.active_calories;
+      if (activeKcal != null) {
+        if (cb && cb.active_from_workouts > 0) {
+          parts.push(
+            `active_kcal=${activeKcal} (${cb.active_from_daily} daily stream + ${cb.active_from_workouts} workout)`
+          );
+        } else {
+          parts.push(`active_kcal=${activeKcal}`);
+        }
+      }
+
       if (cb?.computable) {
         parts.push(`BMR=${cb.bmr}`);
         parts.push(`total=${cb.total}`);
