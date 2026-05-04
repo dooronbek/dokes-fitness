@@ -1,8 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase";
 
+// ---------------------------------------------------------------------------
+// Runtime configuration
+// ---------------------------------------------------------------------------
+// Health Auto Export (HAE) sends large daily-aggregate payloads — often
+// >1 MB, and multi-day backfills can exceed 10 MB. We read the body manually
+// as a ReadableStream below to bypass Next.js's automatic body parser and
+// its implicit size cap, so the route can accept up to ~50 MB at the
+// framework level.
+//
+// Vercel PLATFORM body-size ceiling (separate from Next.js):
+//   • Hobby plan:        4.5 MB hard limit. Payloads larger than this are
+//                        rejected by Vercel's edge BEFORE this function runs
+//                        — there is no override.
+//   • Pro / Enterprise:  defaults to 4.5 MB but can be raised. The function
+//                        itself supports more once the platform allows it.
+//
+// If HAE backfills exceed 4.5 MB on Hobby, the options are:
+//   1. Upgrade to Pro and raise the body-size limit, OR
+//   2. In the HAE iOS app, set Automation → Date Range = "1 day" so each
+//      sync sends only one day at a time (typically <500 KB).
+// ---------------------------------------------------------------------------
 export const runtime = "nodejs";
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
+// Hard cap we enforce ourselves before parsing — defends against accidental
+// or malicious huge bodies regardless of platform limits.
+const MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB
 
 // Map of HAE metric name -> handler that pulls a numeric value out of one
 // daily data point and assigns it to the activity_daily row.
@@ -160,6 +186,40 @@ function logSummary(payload: Record<string, unknown>) {
   );
 }
 
+// Manually stream the request body to avoid Next's built-in body parser,
+// which can reject anything above its (undocumented, runtime-dependent) cap.
+// Returns the raw text plus the exact byte count read off the wire.
+async function readBodyAsText(
+  req: NextRequest
+): Promise<{ text: string; bytes: number; truncated: boolean }> {
+  const reader = req.body?.getReader();
+  if (!reader) return { text: "", bytes: 0, truncated: false };
+
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let bytes = 0;
+  let truncated = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    bytes += value.byteLength;
+    if (bytes > MAX_BODY_BYTES) {
+      truncated = true;
+      try {
+        await reader.cancel();
+      } catch {
+        /* ignore */
+      }
+      break;
+    }
+    chunks.push(decoder.decode(value, { stream: true }));
+  }
+  if (!truncated) chunks.push(decoder.decode());
+  return { text: chunks.join(""), bytes, truncated };
+}
+
 export async function POST(req: NextRequest) {
   // Auth: bearer token only — single shared secret for HAE.
   const secret = process.env.HEALTH_SYNC_SECRET;
@@ -175,10 +235,65 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Stream the body and log its exact size before doing anything with it.
+  let rawBody = "";
+  let bytes = 0;
+  let truncated = false;
+  try {
+    const result = await readBodyAsText(req);
+    rawBody = result.text;
+    bytes = result.bytes;
+    truncated = result.truncated;
+  } catch (e) {
+    console.error(
+      "[health-sync]",
+      new Date().toISOString(),
+      "stream_read_failed",
+      JSON.stringify({ error: (e as Error).message })
+    );
+    return NextResponse.json({ error: "stream_read_failed" }, { status: 400 });
+  }
+
+  console.log(
+    "[health-sync]",
+    new Date().toISOString(),
+    "request_received",
+    JSON.stringify({
+      bytes,
+      kb: +(bytes / 1024).toFixed(1),
+      mb: +(bytes / 1024 / 1024).toFixed(3),
+      content_length: req.headers.get("content-length"),
+      content_type: req.headers.get("content-type"),
+    })
+  );
+
+  if (truncated) {
+    console.error(
+      "[health-sync]",
+      new Date().toISOString(),
+      "body_too_large",
+      JSON.stringify({ bytes, max: MAX_BODY_BYTES })
+    );
+    return NextResponse.json(
+      { error: "payload_too_large", max_bytes: MAX_BODY_BYTES },
+      { status: 413 }
+    );
+  }
+
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = JSON.parse(rawBody);
+  } catch (e) {
+    console.error(
+      "[health-sync]",
+      new Date().toISOString(),
+      "parse_failed",
+      JSON.stringify({
+        bytes,
+        preview: rawBody.slice(0, 500),
+        error: (e as Error).message,
+      })
+    );
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
