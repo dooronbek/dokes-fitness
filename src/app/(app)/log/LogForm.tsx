@@ -37,6 +37,36 @@ function Scale1to5({
   );
 }
 
+function YesNo({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null;
+  onChange: (v: boolean) => void;
+}) {
+  const btn = (active: boolean) =>
+    `min-h-[44px] rounded-xl border text-base ${
+      active
+        ? "bg-zinc-100 text-zinc-900 border-zinc-100"
+        : "bg-zinc-900 text-zinc-200 border-zinc-800"
+    }`;
+  return (
+    <div>
+      <label className="block text-sm text-zinc-300 mb-1.5">{label}</label>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => onChange(true)} className={btn(value === true)}>
+          Yes
+        </button>
+        <button type="button" onClick={() => onChange(false)} className={btn(value === false)}>
+          No
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function LogForm({
   initial,
   today,
@@ -55,6 +85,9 @@ export default function LogForm({
     sleep_quality: initial?.sleep_quality ?? null,
     mood: initial?.mood ?? null,
     energy: initial?.energy ?? null,
+    cold_shower: initial?.cold_shower ?? null,
+    stretching: initial?.stretching ?? null,
+    meditation_minutes: initial?.meditation_minutes?.toString() ?? "",
     soreness_notes: initial?.soreness_notes ?? "",
     notes: initial?.notes ?? "",
   });
@@ -71,10 +104,13 @@ export default function LogForm({
     const weight = parseDecimalInput(f.weight_kg);
     const waist = parseDecimalInput(f.waist_cm);
     const sleep = parseDecimalInput(f.sleep_hours);
-    if (!weight.ok || !waist.ok || !sleep.ok) {
+    const meditation = parseDecimalInput(f.meditation_minutes);
+    if (!weight.ok || !waist.ok || !sleep.ok || !meditation.ok) {
       setErr("Enter a valid number (e.g. 93.5 or 93,5).");
       return;
     }
+    const meditationInt =
+      meditation.value == null ? null : Math.max(0, Math.round(meditation.value));
 
     setBusy(true);
     const res = await fetch("/api/log", {
@@ -88,6 +124,9 @@ export default function LogForm({
         sleep_quality: f.sleep_quality,
         mood: f.mood,
         energy: f.energy,
+        cold_shower: f.cold_shower,
+        stretching: f.stretching,
+        meditation_minutes: meditationInt,
         soreness_notes: f.soreness_notes.trim() || null,
         notes: f.notes.trim() || null,
       }),
@@ -139,12 +178,37 @@ export default function LogForm({
       </div>
 
       <Scale1to5
-        label="Sleep quality"
+        label="Sleep quality (1-5)"
         value={f.sleep_quality}
         onChange={(v) => set("sleep_quality", v)}
       />
-      <Scale1to5 label="Mood" value={f.mood} onChange={(v) => set("mood", v)} />
-      <Scale1to5 label="Energy" value={f.energy} onChange={(v) => set("energy", v)} />
+      <Scale1to5 label="Mood (1-5)" value={f.mood} onChange={(v) => set("mood", v)} />
+      <Scale1to5 label="Energy (1-5)" value={f.energy} onChange={(v) => set("energy", v)} />
+
+      <div className="flex flex-col gap-4 pt-1">
+        <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
+          Morning routine
+        </h2>
+        <YesNo
+          label="Cold shower"
+          value={f.cold_shower}
+          onChange={(v) => set("cold_shower", v)}
+        />
+        <YesNo
+          label="Stretching / warm-up"
+          value={f.stretching}
+          onChange={(v) => set("stretching", v)}
+        />
+        <div>
+          <label className={labelCls}>Meditation (minutes)</label>
+          <input
+            inputMode="numeric"
+            value={f.meditation_minutes}
+            onChange={(e) => set("meditation_minutes", e.target.value)}
+            className={inputCls}
+          />
+        </div>
+      </div>
 
       <div>
         <label className={labelCls}>Soreness</label>

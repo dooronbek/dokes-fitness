@@ -221,9 +221,39 @@ function activityBlock(ctx: CoachContext): string {
   return lines.join("\n");
 }
 
+function dailyLogsBlock(ctx: CoachContext): string {
+  const lines: string[] = ["### Daily logs (subjective ratings on 1-5 scale)"];
+  if (ctx.recent_logs.length === 0) {
+    lines.push("(no logs yet)");
+    return lines.join("\n");
+  }
+  for (const l of ctx.recent_logs) {
+    const parts: string[] = [];
+    if (l.weight_kg != null) parts.push(`weight=${l.weight_kg}kg`);
+    if (l.waist_cm != null) parts.push(`waist=${l.waist_cm}cm`);
+    if (l.sleep_hours != null) parts.push(`sleep_hours=${l.sleep_hours}`);
+    if (l.sleep_quality != null) parts.push(`sleep_quality=${l.sleep_quality}/5`);
+    if (l.mood != null) parts.push(`mood=${l.mood}/5`);
+    if (l.energy != null) parts.push(`energy=${l.energy}/5`);
+    if (l.meditation_minutes != null && l.meditation_minutes > 0) {
+      parts.push(`meditation=${l.meditation_minutes}min`);
+    }
+    if (l.soreness_notes && l.soreness_notes.trim()) {
+      parts.push(`soreness="${l.soreness_notes.trim()}"`);
+    }
+    if (l.notes && l.notes.trim()) {
+      parts.push(`notes="${l.notes.trim()}"`);
+    }
+    lines.push(`${l.log_date}: ${parts.join(", ") || "(empty)"}`);
+  }
+  return lines.join("\n");
+}
+
 // Build a compact, structured context block for the model.
-// Always JSON for the recent data so the model parses precisely; the
-// long-term knowledge dossier is rendered as labelled markdown sections.
+// Daily logs and activity are rendered as text lines (more compact, easier
+// for the model to scan); meals and yesterday's plan stay as JSON for
+// precise parsing. The long-term knowledge dossier uses labelled markdown
+// sections.
 export function contextBlock(ctx: CoachContext): string {
   const slim = {
     today: ctx.today,
@@ -237,17 +267,6 @@ export function contextBlock(ctx: CoachContext): string {
       injuries_notes: ctx.profile.injuries_notes,
       coaching_style: ctx.profile.coaching_style,
     },
-    recent_logs: ctx.recent_logs.map((l) => ({
-      date: l.log_date,
-      weight_kg: l.weight_kg,
-      waist_cm: l.waist_cm,
-      sleep_hours: l.sleep_hours,
-      sleep_quality: l.sleep_quality,
-      mood: l.mood,
-      energy: l.energy,
-      soreness_notes: l.soreness_notes,
-      notes: l.notes,
-    })),
     recent_meals: ctx.recent_meals.map((m) => ({
       date: m.meal_date,
       kcal: m.calories,
@@ -264,13 +283,15 @@ export function contextBlock(ctx: CoachContext): string {
       completion_notes: ctx.yesterday_plan.completion_notes,
     },
   };
+  const logs =
+    "## DAILY LOGS (last 7 days)\n" + dailyLogsBlock(ctx);
   const recent =
     "## RECENT DATA (last 7 days)\n<context>\n" +
     JSON.stringify(slim, null, 2) +
     "\n</context>";
   const activity = activityBlock(ctx);
   const dossier = knowledgeBlock(ctx.knowledge);
-  return [dossier, activity, recent].filter((s) => s).join("\n\n");
+  return [dossier, activity, logs, recent].filter((s) => s).join("\n\n");
 }
 
 export function coachSystemPrompt(ctx: CoachContext): string {
@@ -280,10 +301,11 @@ export function coachSystemPrompt(ctx: CoachContext): string {
   return [
     "You are Dokes, a personal AI fitness and nutrition coach for a single user.",
     `Coaching style: ${style}.`,
+    "Subjective ratings (sleep_quality, mood, energy) are user self-reports on a 1-5 scale. 1 = very poor, 5 = excellent. 3 is average. 4-5 is a good day.",
     "The LONG-TERM KNOWLEDGE section reflects facts about this person that are stable over time — treat it as ground truth.",
     "The ACTIVITY DATA section reflects what the user actually did per their watch/phone (steps, sleep, HR, workouts). If they say 'I trained yesterday' but no workout is in ACTIVITY DATA from yesterday, gently flag the discrepancy. If they ask about training and ACTIVITY DATA is empty, mention they should set up Health Auto Export to give you better signal.",
     "Total calories burned per day is computed as: Mifflin-St Jeor BMR (using the user's height, age, sex, and most recent logged weight) + Active calories from their watch. If a day has no weight logged on or before it, total is not shown — gently encourage the user to log weight regularly so calorie math stays accurate.",
-    "The RECENT DATA section reflects the last 7-14 days of logged behavior (profile, daily logs, meals, yesterday's plan). Use all three sources together.",
+    "The DAILY LOGS and RECENT DATA sections reflect the last 7-14 days of logged behavior (daily check-ins, meals, yesterday's plan). Use all sources together.",
     "If long-term knowledge contradicts a single recent data point (e.g., user noted today they're bored of an exercise they previously listed as a favorite), prefer the recent data but acknowledge the shift.",
     "Be specific. Reference actual numbers from the context when relevant. Do not invent data that isn't there.",
     "Mobile chat — keep replies short. Bullet points over paragraphs. No filler preambles.",

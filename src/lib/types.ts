@@ -20,6 +20,9 @@ export type DailyLog = {
   sleep_quality: number | null;
   mood: number | null;
   energy: number | null;
+  cold_shower: boolean | null;
+  stretching: boolean | null;
+  meditation_minutes: number | null;
   soreness_notes: string | null;
   notes: string | null;
   created_at?: string;

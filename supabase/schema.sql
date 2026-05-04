@@ -30,6 +30,27 @@ create table if not exists public.daily_log (
   created_at      timestamptz not null default now()
 );
 
+alter table public.daily_log
+  add column if not exists cold_shower boolean,
+  add column if not exists stretching boolean,
+  add column if not exists meditation_minutes integer;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sleep_quality_range') then
+    alter table public.daily_log add constraint sleep_quality_range check (sleep_quality is null or sleep_quality between 1 and 5);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mood_range') then
+    alter table public.daily_log add constraint mood_range check (mood is null or mood between 1 and 5);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'energy_range') then
+    alter table public.daily_log add constraint energy_range check (energy is null or energy between 1 and 5);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'meditation_minutes_nonneg') then
+    alter table public.daily_log add constraint meditation_minutes_nonneg check (meditation_minutes is null or meditation_minutes >= 0);
+  end if;
+end$$;
+
 create table if not exists public.meals (
   id              bigserial primary key,
   meal_date       date not null,
