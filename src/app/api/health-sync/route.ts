@@ -581,10 +581,10 @@ export async function POST(req: NextRequest) {
       const activeKcal = roundOrNull(getQty(w.activeEnergyBurned));
       const totalKcal = roundOrNull(getQty(w.totalEnergyBurned));
 
-      // Only max_hr — HAE's avg HR is cooldown-only and misleading. Real
-      // avg HR is captured at plan completion (training_plans.avg_hr).
-      const hr = (w as { heartRate?: { max?: unknown } }).heartRate;
-      const maxHr = roundOrNull(getQty(w.maxHeartRate) ?? getQty(hr?.max));
+      // No HR ingested — HAE's workout-level avg AND max both come from the
+      // unreliable cooldown stream. Real HR is the user-typed avg on
+      // training_plans.avg_hr. raw_payload still carries HAE's HR fields if
+      // we ever want to revisit.
 
       // HAE distance is km — convert to metres. May be absent for non-cardio.
       const distKm = getQty(w.totalDistance);
@@ -603,7 +603,6 @@ export async function POST(req: NextRequest) {
         active_calories: activeKcal,
         total_calories: totalKcal,
         distance_m: distanceM,
-        max_hr: maxHr,
         notes: typeof w.notes === "string" ? w.notes : null,
         raw_payload: w,
         synced_at: new Date().toISOString(),
@@ -617,7 +616,7 @@ export async function POST(req: NextRequest) {
       console.log(
         "[health-sync]",
         new Date().toISOString(),
-        `workout_processed external_id=${externalId} type=${type} duration_min=${durationMin} active_kcal=${activeKcal} max_hr=${maxHr}`
+        `workout_processed external_id=${externalId} type=${type} duration_min=${durationMin} active_kcal=${activeKcal}`
       );
       workoutsProcessed++;
     } catch (e) {

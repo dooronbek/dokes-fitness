@@ -66,7 +66,12 @@ export async function loadCoachContext(opts?: {
       .order("activity_date", { ascending: true }),
     sb
       .from("workouts")
-      .select("*")
+      // Explicit list — never load raw_payload into the coach context. It's
+      // forensic-only storage and we don't want HAE's avg/max HR fields
+      // (still inside raw_payload) accidentally surfaced to the model.
+      .select(
+        "id, external_id, source, workout_date, started_at, ended_at, type, duration_min, active_calories, total_calories, distance_m, notes, synced_at"
+      )
       .gte("workout_date", since14)
       .order("started_at", { ascending: true }),
     sb
@@ -215,7 +220,8 @@ function activityBlock(ctx: CoachContext): string {
       if (w.duration_min != null) bits.push(`${w.duration_min} min`);
       const kcal = w.active_calories ?? w.total_calories;
       if (kcal != null) bits.push(`${kcal} kcal`);
-      if (w.max_hr != null) bits.push(`max HR ${w.max_hr}`);
+      // No HR emitted here — HAE's max_hr shares the unreliable cooldown-only
+      // source as avg_hr. Real HR comes from training_plans.avg_hr (PAST PLANS).
       if (w.distance_m != null) bits.push(`${(w.distance_m / 1000).toFixed(2)} km`);
       lines.push(`${w.workout_date} ${w.type ?? "workout"} - ${bits.join(", ") || "(no metrics)"}`);
     }

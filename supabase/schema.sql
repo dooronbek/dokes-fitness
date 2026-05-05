@@ -134,11 +134,12 @@ create index if not exists activity_daily_date_idx on public.activity_daily (act
 
 -- Individual workouts (one row per workout)
 --
--- avg_hr is deliberately NOT stored: HAE's workout-level avg HR is derived
--- only from cooldown samples (when the watch is being unstrapped), so the
--- number is unreliably low. Real avg HR is captured at plan-completion time
--- on training_plans.avg_hr, matched to workouts by date in the UI / coach
--- context. max_hr stays — that signal is accurate.
+-- HR fields (avg_hr, max_hr) are deliberately NOT stored: HAE derives both
+-- from the cooldown sample stream (when the watch is being unstrapped), so
+-- both numbers are unreliable. Real avg HR is captured at plan-completion
+-- time on training_plans.avg_hr, matched to workouts by date in the UI /
+-- coach context. raw_payload still carries HAE's HR fields if we ever want
+-- to revisit.
 create table if not exists public.workouts (
   id              bigserial primary key,
   external_id     text unique,           -- stable ID from source for idempotency
@@ -151,7 +152,6 @@ create table if not exists public.workouts (
   active_calories integer,
   total_calories  integer,
   distance_m      integer,
-  max_hr          integer,
   notes           text,
   raw_payload     jsonb,
   synced_at       timestamptz not null default now()
@@ -159,8 +159,9 @@ create table if not exists public.workouts (
 create index if not exists workouts_date_idx on public.workouts (workout_date desc);
 create index if not exists workouts_started_idx on public.workouts (started_at desc);
 
--- Drop avg_hr from any pre-existing deployments. Safe to re-run.
+-- Drop legacy HR columns from pre-existing deployments. Safe to re-run.
 alter table public.workouts drop column if exists avg_hr;
+alter table public.workouts drop column if exists max_hr;
 
 create table if not exists public.coach_messages (
   id              bigserial primary key,

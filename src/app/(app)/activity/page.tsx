@@ -40,7 +40,11 @@ export default async function ActivityPage() {
       .order("activity_date", { ascending: false }),
     sb
       .from("workouts")
-      .select("*")
+      // Explicit list — raw_payload stays in DB for forensic storage but
+      // never reaches the UI.
+      .select(
+        "id, external_id, source, workout_date, started_at, ended_at, type, duration_min, active_calories, total_calories, distance_m, notes, synced_at"
+      )
       .gte("workout_date", since)
       .order("started_at", { ascending: false }),
     sb
