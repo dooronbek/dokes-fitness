@@ -28,3 +28,11 @@ body {
 * {
   -webkit-text-size-adjust: 100%;
 }
+
+/* Hide the splash overlay synchronously when sessionStorage already flagged
+   it as shown this session. The inline script in (app)/layout.tsx sets
+   data-splash-skip on <html> before the splash markup is parsed, so the
+   browser never paints the overlay on subsequent loads. */
+html[data-splash-skip] [data-splash-overlay] {
+  display: none !important;
+}

@@ -21,6 +21,46 @@ export const metadata: Metadata = {
     capable: true,
     title: "Dokes Fitness",
     statusBarStyle: "black-translucent",
+    // iOS shows these PNGs from the moment the icon is tapped until the
+    // first React paint. Sizes match Apple's portrait device-pixel
+    // dimensions; media queries use CSS-point dimensions plus DPR.
+    startupImage: [
+      {
+        url: "/splash/iphone-16-pro-max.png",
+        media:
+          "screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)",
+      },
+      {
+        url: "/splash/iphone-16-pro.png",
+        media:
+          "screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)",
+      },
+      {
+        url: "/splash/iphone-14-plus.png",
+        media:
+          "screen and (device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)",
+      },
+      {
+        url: "/splash/iphone-14.png",
+        media:
+          "screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)",
+      },
+      {
+        url: "/splash/iphone-xs-max.png",
+        media:
+          "screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)",
+      },
+      {
+        url: "/splash/iphone-xr.png",
+        media:
+          "screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)",
+      },
+      {
+        url: "/splash/iphone-se.png",
+        media:
+          "screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)",
+      },
+    ],
   },
   icons: {
     icon: [
