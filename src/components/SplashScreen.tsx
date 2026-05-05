@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Quote } from "@/lib/quotes";
 
 const SESSION_KEY = "dokes_splash_shown";
-const QUOTE_VISIBLE_MS = 1500;
+const QUOTE_VISIBLE_MS = 3000;
 const FADE_OUT_MS = 400;
 const QUOTE_FADE_IN_DELAY_MS = 200;
 
