@@ -197,7 +197,8 @@ function activityBlock(ctx: CoachContext): string {
       if (d.sleep_minutes != null)
         parts.push(`sleep_hours=${(d.sleep_minutes / 60).toFixed(1)}`);
       // Skip d.avg_hr — activity_daily doesn't get continuous HR; the column
-      // is always null and noisy. Workouts have real per-workout avg_hr/max_hr.
+      // is always null and noisy. Real avg HR comes from training_plans.avg_hr
+      // (typed in at plan completion) and is rendered in the PAST PLANS block.
       if (d.resting_hr != null) parts.push(`resting_hr=${d.resting_hr}`);
       if (d.hrv_ms != null) parts.push(`hrv_ms=${Number(d.hrv_ms).toFixed(0)}`);
       if (d.exercise_minutes != null) parts.push(`exercise_min=${d.exercise_minutes}`);
@@ -214,7 +215,7 @@ function activityBlock(ctx: CoachContext): string {
       if (w.duration_min != null) bits.push(`${w.duration_min} min`);
       const kcal = w.active_calories ?? w.total_calories;
       if (kcal != null) bits.push(`${kcal} kcal`);
-      if (w.avg_hr != null) bits.push(`avg HR ${w.avg_hr}`);
+      if (w.max_hr != null) bits.push(`max HR ${w.max_hr}`);
       if (w.distance_m != null) bits.push(`${(w.distance_m / 1000).toFixed(2)} km`);
       lines.push(`${w.workout_date} ${w.type ?? "workout"} - ${bits.join(", ") || "(no metrics)"}`);
     }

@@ -101,7 +101,6 @@ export type Workout = {
   active_calories: number | null;
   total_calories: number | null;
   distance_m: number | null;
-  avg_hr: number | null;
   max_hr: number | null;
   notes: string | null;
   raw_payload?: unknown;

@@ -581,8 +581,9 @@ export async function POST(req: NextRequest) {
       const activeKcal = roundOrNull(getQty(w.activeEnergyBurned));
       const totalKcal = roundOrNull(getQty(w.totalEnergyBurned));
 
-      const hr = (w as { heartRate?: { avg?: unknown; max?: unknown } }).heartRate;
-      const avgHr = roundOrNull(getQty(w.avgHeartRate) ?? getQty(hr?.avg));
+      // Only max_hr — HAE's avg HR is cooldown-only and misleading. Real
+      // avg HR is captured at plan completion (training_plans.avg_hr).
+      const hr = (w as { heartRate?: { max?: unknown } }).heartRate;
       const maxHr = roundOrNull(getQty(w.maxHeartRate) ?? getQty(hr?.max));
 
       // HAE distance is km — convert to metres. May be absent for non-cardio.
@@ -602,7 +603,6 @@ export async function POST(req: NextRequest) {
         active_calories: activeKcal,
         total_calories: totalKcal,
         distance_m: distanceM,
-        avg_hr: avgHr,
         max_hr: maxHr,
         notes: typeof w.notes === "string" ? w.notes : null,
         raw_payload: w,
@@ -617,7 +617,7 @@ export async function POST(req: NextRequest) {
       console.log(
         "[health-sync]",
         new Date().toISOString(),
-        `workout_processed external_id=${externalId} type=${type} duration_min=${durationMin} active_kcal=${activeKcal} avg_hr=${avgHr} max_hr=${maxHr}`
+        `workout_processed external_id=${externalId} type=${type} duration_min=${durationMin} active_kcal=${activeKcal} max_hr=${maxHr}`
       );
       workoutsProcessed++;
     } catch (e) {
