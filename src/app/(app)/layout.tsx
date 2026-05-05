@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { isAuthedServer } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
+import SplashScreen from "@/components/SplashScreen";
 
 export default async function AppLayout({
   children,
@@ -21,6 +22,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-dvh flex flex-col bg-zinc-950 text-zinc-100">
+      <SplashScreen />
       <main
         className="flex-1 pb-24"
         style={{ paddingTop: "env(safe-area-inset-top)" }}

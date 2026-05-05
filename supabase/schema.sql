@@ -167,5 +167,33 @@ create table if not exists public.coach_knowledge (
 );
 insert into public.coach_knowledge (id) values (1) on conflict (id) do nothing;
 
+create table if not exists public.quotes (
+  id           bigserial primary key,
+  text         text not null unique,
+  author       text,
+  source       text not null default 'ai_generated',  -- 'ai_generated' | 'seed' | 'user'
+  created_at   timestamptz not null default now()
+);
+create index if not exists quotes_text_idx on public.quotes (lower(text));
+
+-- Seed with a small starter set so splash works on day one
+insert into public.quotes (text, author, source) values
+  ('Don''t count the days, make the days count.', 'Muhammad Ali', 'seed'),
+  ('Discipline is the bridge between goals and accomplishment.', 'Jim Rohn', 'seed'),
+  ('Strength does not come from winning. Your struggles develop your strengths.', 'Arnold Schwarzenegger', 'seed'),
+  ('The pain you feel today is the strength you feel tomorrow.', null, 'seed'),
+  ('Champions are made when no one is watching.', null, 'seed'),
+  ('Hard work beats talent when talent doesn''t work hard.', 'Tim Notke', 'seed'),
+  ('Suffer the pain of discipline or suffer the pain of regret.', 'Jim Rohn', 'seed'),
+  ('You have power over your mind — not outside events. Realize this, and you will find strength.', 'Marcus Aurelius', 'seed'),
+  ('Everyone has a plan until they get punched in the face.', 'Mike Tyson', 'seed'),
+  ('What we do in life echoes in eternity.', null, 'seed'),
+  ('Discipline is freedom.', 'Jocko Willink', 'seed'),
+  ('Pain is temporary. Quitting lasts forever.', 'Lance Armstrong', 'seed'),
+  ('Build the body. Earn the focus.', null, 'seed'),
+  ('It is not the mountain we conquer, but ourselves.', 'Edmund Hillary', 'seed'),
+  ('Today: one rep, one meal, one decision better than yesterday.', null, 'seed')
+on conflict (text) do nothing;
+
 -- Force PostgREST to reload its schema cache (fixes PGRST205 after DDL).
 notify pgrst, 'reload schema';
