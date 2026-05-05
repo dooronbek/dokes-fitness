@@ -32,7 +32,7 @@ export default async function ActivityPage() {
   const sb = supabaseServer();
   const since = daysAgoISO(13);
 
-  const [dailyRes, workoutsRes] = await Promise.all([
+  const [dailyRes, workoutsRes, plansRes] = await Promise.all([
     sb
       .from("activity_daily")
       .select("*")
@@ -43,10 +43,20 @@ export default async function ActivityPage() {
       .select("*")
       .gte("workout_date", since)
       .order("started_at", { ascending: false }),
+    sb
+      .from("training_plans")
+      .select("plan_date, avg_hr")
+      .gte("plan_date", since),
   ]);
 
   const daily = (dailyRes.data ?? []) as ActivityDaily[];
   const workouts = (workoutsRes.data ?? []) as Workout[];
+  // HAE workouts.avg_hr is unreliable (cooldown samples only); use the avg_hr
+  // the user typed in at plan-completion time, matched by date.
+  const planHrByDate = new Map<string, number>();
+  for (const p of (plansRes.data ?? []) as { plan_date: string; avg_hr: number | null }[]) {
+    if (p.avg_hr != null) planHrByDate.set(p.plan_date, p.avg_hr);
+  }
 
   // Compute BMR + total calories per day. HAE's basal_energy_burned was
   // unreliable (multi-source double-counting), so we run Mifflin-St Jeor
@@ -143,44 +153,54 @@ export default async function ActivityPage() {
             Workouts
           </h2>
           <ul className="flex flex-col gap-2">
-            {workouts.map((w) => (
-              <li
-                key={w.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <div>
-                    <div className="text-base font-medium capitalize">
-                      {w.type ?? "workout"}
+            {workouts.map((w) => {
+              const planHr = planHrByDate.get(w.workout_date);
+              const cols = planHr != null ? 3 : 2;
+              return (
+                <li
+                  key={w.id}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div>
+                      <div className="text-base font-medium capitalize">
+                        {w.type ?? "workout"}
+                      </div>
+                      <div className="text-[11px] text-zinc-500">
+                        {formatShort(w.workout_date)} · {fmtTime(w.started_at)}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-zinc-500">
-                      {formatShort(w.workout_date)} · {fmtTime(w.started_at)}
-                    </div>
-                  </div>
-                  <div className="text-xs text-zinc-400 tabular-nums">
-                    {formatHours(w.duration_min)}
-                  </div>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-zinc-400">
-                  <div>
-                    <div className="text-zinc-500">kcal</div>
-                    <div className="text-zinc-200 tabular-nums">
-                      {fmtNum(w.active_calories ?? w.total_calories)}
+                    <div className="text-xs text-zinc-400 tabular-nums">
+                      {formatHours(w.duration_min)}
                     </div>
                   </div>
-                  <div>
-                    <div className="text-zinc-500">avg HR</div>
-                    <div className="text-zinc-200 tabular-nums">{fmtNum(w.avg_hr)}</div>
-                  </div>
-                  <div>
-                    <div className="text-zinc-500">distance</div>
-                    <div className="text-zinc-200 tabular-nums">
-                      {w.distance_m != null ? `${(w.distance_m / 1000).toFixed(2)} km` : "—"}
+                  <div
+                    className={`mt-2 grid gap-2 text-[11px] text-zinc-400 ${
+                      cols === 3 ? "grid-cols-3" : "grid-cols-2"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-zinc-500">kcal</div>
+                      <div className="text-zinc-200 tabular-nums">
+                        {fmtNum(w.active_calories ?? w.total_calories)}
+                      </div>
+                    </div>
+                    {planHr != null && (
+                      <div>
+                        <div className="text-zinc-500">avg HR</div>
+                        <div className="text-zinc-200 tabular-nums">{planHr} bpm</div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-zinc-500">distance</div>
+                      <div className="text-zinc-200 tabular-nums">
+                        {w.distance_m != null ? `${(w.distance_m / 1000).toFixed(2)} km` : "—"}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
