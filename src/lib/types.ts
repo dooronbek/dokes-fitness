@@ -56,6 +56,7 @@ export type TrainingPlan = {
   friendly_text: string | null;
   completed: boolean | null;
   completion_notes: string | null;
+  avg_hr: number | null;
   created_at?: string;
 };
 

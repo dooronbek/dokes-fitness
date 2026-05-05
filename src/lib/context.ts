@@ -21,6 +21,7 @@ export type CoachContext = {
   recent_activity: ActivityDaily[];
   recent_workouts: Workout[];
   yesterday_plan: TrainingPlan | null;
+  recent_plans: TrainingPlan[];
   recent_messages: CoachMessage[];
   calorie_breakdowns: CalorieBreakdown[];
 };
@@ -43,6 +44,7 @@ export async function loadCoachContext(opts?: {
     activityRes,
     workoutsRes,
     yPlanRes,
+    recentPlansRes,
     msgsRes,
   ] = await Promise.all([
     sb.from("profile").select("*").eq("id", 1).maybeSingle(),
@@ -72,6 +74,12 @@ export async function loadCoachContext(opts?: {
       .select("*")
       .eq("plan_date", yesterday)
       .maybeSingle(),
+    sb
+      .from("training_plans")
+      .select("*")
+      .gte("plan_date", since)
+      .lt("plan_date", today)
+      .order("plan_date", { ascending: false }),
     opts?.includeMessages
       ? sb
           .from("coach_messages")
@@ -112,6 +120,7 @@ export async function loadCoachContext(opts?: {
     recent_activity,
     recent_workouts: (workoutsRes.data ?? []) as Workout[],
     yesterday_plan: (yPlanRes.data ?? null) as TrainingPlan | null,
+    recent_plans: (recentPlansRes.data ?? []) as TrainingPlan[],
     recent_messages,
     calorie_breakdowns,
   };
@@ -241,6 +250,19 @@ function dailyLogsBlock(ctx: CoachContext): string {
   return lines.join("\n");
 }
 
+function pastPlansBlock(ctx: CoachContext): string {
+  if (ctx.recent_plans.length === 0) return "";
+  const lines = ["## PAST PLANS (last 7 days, most recent first)"];
+  for (const p of ctx.recent_plans) {
+    const focus = (p.focus ?? "Plan").trim();
+    const dur = p.total_minutes != null ? ` ${p.total_minutes}min` : "";
+    const status = p.completed ? "completed" : "not completed";
+    const hr = p.avg_hr != null ? `, HR avg ${p.avg_hr}` : "";
+    lines.push(`- ${p.plan_date}: ${focus}${dur} — ${status}${hr}`);
+  }
+  return lines.join("\n");
+}
+
 function recentMessagesBlock(ctx: CoachContext, limit: number): string {
   if (ctx.recent_messages.length === 0) return "";
   const slice = ctx.recent_messages.slice(-limit);
@@ -287,6 +309,7 @@ export function contextBlock(
       main: ctx.yesterday_plan.main,
       completed: ctx.yesterday_plan.completed,
       completion_notes: ctx.yesterday_plan.completion_notes,
+      avg_hr: ctx.yesterday_plan.avg_hr,
     },
   };
   const logs =
@@ -296,11 +319,14 @@ export function contextBlock(
     JSON.stringify(slim, null, 2) +
     "\n</context>";
   const activity = activityBlock(ctx);
+  const pastPlans = pastPlansBlock(ctx);
   const dossier = knowledgeBlock(ctx.knowledge);
   const messages = opts?.includeRecentMessages
     ? recentMessagesBlock(ctx, opts.includeRecentMessages)
     : "";
-  return [dossier, activity, logs, recent, messages].filter((s) => s).join("\n\n");
+  return [dossier, activity, pastPlans, logs, recent, messages]
+    .filter((s) => s)
+    .join("\n\n");
 }
 
 export function coachSystemPrompt(ctx: CoachContext): string {

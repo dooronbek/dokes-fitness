@@ -7,18 +7,35 @@ import type { TrainingPlan } from "@/lib/types";
 export default function PlanView({ plan }: { plan: TrainingPlan }) {
   const router = useRouter();
   const [notes, setNotes] = useState(plan.completion_notes ?? "");
+  const [hrInput, setHrInput] = useState(
+    plan.avg_hr != null ? String(plan.avg_hr) : ""
+  );
   const [completing, setCompleting] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const busy = completing || regenerating;
 
   async function complete(completed: boolean) {
+    let avg_hr: number | null = null;
+    if (completed && hrInput.trim()) {
+      const n = Number(hrInput.trim());
+      if (!Number.isInteger(n) || n < 30 || n > 220) {
+        setErr("Avg HR must be a whole number between 30 and 220.");
+        return;
+      }
+      avg_hr = n;
+    }
+
     setCompleting(true);
     setErr(null);
     const res = await fetch(`/api/plan/${plan.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ completed, completion_notes: notes.trim() || null }),
+      body: JSON.stringify({
+        completed,
+        completion_notes: notes.trim() || null,
+        avg_hr: completed ? avg_hr : null,
+      }),
     });
     setCompleting(false);
     if (!res.ok) {
@@ -101,7 +118,29 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
       )}
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 flex flex-col gap-3">
-        <h3 className="text-sm font-medium">{plan.completed ? "Completed" : "Mark complete"}</h3>
+        <h3 className="text-sm font-medium">
+          {plan.completed
+            ? plan.avg_hr != null
+              ? `Completed ✓ — HR avg ${plan.avg_hr} bpm`
+              : "Completed ✓"
+            : "Mark complete"}
+        </h3>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-zinc-400">Avg HR (optional)</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={30}
+            max={220}
+            value={hrInput}
+            onChange={(e) => setHrInput(e.target.value)}
+            placeholder="144"
+            className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 text-base outline-none focus:border-zinc-600"
+          />
+          <span className="text-[11px] text-zinc-500">
+            From your watch — leave blank if not applicable
+          </span>
+        </label>
         <textarea
           rows={3}
           value={notes}
@@ -122,8 +161,8 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
                 ? "Reopening…"
                 : "Saving…"
               : plan.completed
-                ? "Completed ✓ — Reopen"
-                : "Mark done"}
+                ? "Reopen"
+                : "Mark complete"}
           </button>
           <button
             type="button"

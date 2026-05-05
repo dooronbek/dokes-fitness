@@ -83,6 +83,19 @@ create table if not exists public.training_plans (
   created_at        timestamptz not null default now()
 );
 
+-- Manually-entered avg HR captured at plan completion. HAE workout HR is
+-- unreliable (often missing or wrong source), so the user types the watch's
+-- actual avg HR when marking the plan done. Optional — null if not entered.
+alter table public.training_plans
+  add column if not exists avg_hr smallint;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'training_plans_avg_hr_range') then
+    alter table public.training_plans add constraint training_plans_avg_hr_range check (avg_hr is null or avg_hr between 30 and 220);
+  end if;
+end$$;
+
 drop table if exists public.activity cascade;
 
 -- Daily activity summaries (one row per day, source).
