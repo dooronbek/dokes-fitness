@@ -170,15 +170,7 @@ function activityBlock(ctx: CoachContext): string {
 
       const cb = breakdownByDate.get(d.activity_date);
       const activeKcal = cb?.active ?? d.active_calories;
-      if (activeKcal != null) {
-        if (cb && cb.active_from_workouts > 0) {
-          parts.push(
-            `active_kcal=${activeKcal} (${cb.active_from_daily} daily stream + ${cb.active_from_workouts} workout)`
-          );
-        } else {
-          parts.push(`active_kcal=${activeKcal}`);
-        }
-      }
+      if (activeKcal != null) parts.push(`active_kcal=${activeKcal}`);
 
       if (cb?.computable) {
         parts.push(`BMR=${cb.bmr}`);
@@ -322,6 +314,7 @@ export function coachSystemPrompt(ctx: CoachContext): string {
     "The LONG-TERM KNOWLEDGE section reflects facts about this person that are stable over time — treat it as ground truth.",
     "The ACTIVITY DATA section reflects what the user actually did per their watch/phone (steps, sleep, HR, workouts). If they say 'I trained yesterday' but no workout is in ACTIVITY DATA from yesterday, gently flag the discrepancy. If they ask about training and ACTIVITY DATA is empty, mention they should set up Health Auto Export to give you better signal.",
     "Total calories burned per day is computed as: Mifflin-St Jeor BMR (using the user's height, age, sex, and most recent logged weight) + Active calories from their watch. If a day has no weight logged on or before it, total is not shown — gently encourage the user to log weight regularly so calorie math stays accurate.",
+    "active_kcal is the total active energy from the user's watch (Zepp via Apple Health), already including both ambient activity throughout the day AND any recorded workouts. Workouts shown separately in the WORKOUTS section are for training context (type, duration, HR) but their calorie values are already reflected in the daily active_kcal — do NOT sum them.",
     "The DAILY LOGS and RECENT DATA sections reflect the last 7-14 days of logged behavior (daily check-ins, meals, yesterday's plan). Use all sources together.",
     "If long-term knowledge contradicts a single recent data point (e.g., user noted today they're bored of an exercise they previously listed as a favorite), prefer the recent data but acknowledge the shift.",
     "Be specific. Reference actual numbers from the context when relevant. Do not invent data that isn't there.",

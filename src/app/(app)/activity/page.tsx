@@ -97,10 +97,6 @@ export default async function ActivityPage() {
                         : "Profile incomplete (height/age/sex)"
                       : undefined;
                   const activeDisplay = cb?.active ?? d.active_calories;
-                  const activeTooltip =
-                    cb && cb.active_from_workouts > 0
-                      ? `${cb.active_from_daily} daily stream + ${cb.active_from_workouts} workout`
-                      : undefined;
                   return (
                     <tr key={d.id} className="border-t border-zinc-800">
                       <td className="px-2 py-2 text-zinc-300">
@@ -109,14 +105,8 @@ export default async function ActivityPage() {
                       <td className="px-1 py-2 text-right tabular-nums">
                         {fmtNum(d.steps)}
                       </td>
-                      <td
-                        className="px-1 py-2 text-right tabular-nums"
-                        title={activeTooltip}
-                      >
+                      <td className="px-1 py-2 text-right tabular-nums">
                         {fmtNum(activeDisplay)}
-                        {activeTooltip && (
-                          <span className="text-zinc-500"> *</span>
-                        )}
                       </td>
                       <td
                         className="px-1 py-2 text-right tabular-nums text-zinc-400"

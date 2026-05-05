@@ -18,12 +18,11 @@ export function computeBMR(
 export type CalorieBreakdown = {
   date: string;
   bmr: number | null;
-  // Sum of the daily Active Energy stream + every workout's active_calories
-  // for this date. Apple Health does not merge Zepp workout calories into
-  // the daily stream, so we have to add them explicitly.
-  active: number;
-  active_from_daily: number;
-  active_from_workouts: number;
+  // Total active energy from HAE's daily Active Energy stream (Zepp via Apple
+  // Health). HAE is configured with Preferred Sources = Zepp, so this single
+  // number covers ambient activity AND every recorded workout. Do not sum
+  // workouts.active_calories on top — that double-counts.
+  active: number | null;
   total: number | null;
   weight_used_kg: number | null;
   weight_source: "log_same_day" | "log_recent" | "none";
@@ -39,7 +38,7 @@ export async function getCalorieBreakdown(
 ): Promise<CalorieBreakdown> {
   const sb = supabaseServer();
 
-  const [profileRes, weightRes, activityRes, workoutsRes] = await Promise.all([
+  const [profileRes, weightRes, activityRes] = await Promise.all([
     sb.from("profile").select("height_cm, age, sex").eq("id", 1).maybeSingle(),
     sb
       .from("daily_log")
@@ -54,10 +53,6 @@ export async function getCalorieBreakdown(
       .select("active_calories")
       .eq("activity_date", date)
       .maybeSingle(),
-    sb
-      .from("workouts")
-      .select("active_calories")
-      .eq("workout_date", date),
   ]);
 
   const profile = profileRes.data as
@@ -69,14 +64,8 @@ export async function getCalorieBreakdown(
   const activityRow = activityRes.data as
     | { active_calories: number | null }
     | null;
-  const workoutRows = (workoutsRes.data ?? []) as { active_calories: number | null }[];
 
-  const dailyActive = activityRow?.active_calories ?? 0;
-  const workoutActive = workoutRows.reduce(
-    (sum, w) => sum + (w.active_calories ?? 0),
-    0
-  );
-  const active = dailyActive + workoutActive;
+  const active = activityRow?.active_calories ?? null;
 
   const weight =
     weightRow && weightRow.weight_kg != null ? Number(weightRow.weight_kg) : null;
@@ -93,12 +82,10 @@ export async function getCalorieBreakdown(
     !profile?.sex ||
     weight == null
   ) {
-    return {
+    const result: CalorieBreakdown = {
       date,
       bmr: null,
       active,
-      active_from_daily: dailyActive,
-      active_from_workouts: workoutActive,
       total: null,
       weight_used_kg: weight,
       weight_source,
@@ -106,6 +93,10 @@ export async function getCalorieBreakdown(
       reason_if_not:
         weight == null ? "no_weight_logged" : "profile_incomplete",
     };
+    console.log(
+      `[calories] date=${date} active=${active ?? "—"} bmr=— total=— weight_kg=${weight ?? "—"} source=${weight_source}`
+    );
+    return result;
   }
 
   const bmr = computeBMR(
@@ -114,14 +105,16 @@ export async function getCalorieBreakdown(
     profile.age,
     profile.sex
   );
-  const total = bmr + active;
+  const total = bmr + (active ?? 0);
+
+  console.log(
+    `[calories] date=${date} active=${active ?? 0} bmr=${bmr} total=${total} weight_kg=${weight} source=${weight_source}`
+  );
 
   return {
     date,
     bmr,
     active,
-    active_from_daily: dailyActive,
-    active_from_workouts: workoutActive,
     total,
     weight_used_kg: weight,
     weight_source,
