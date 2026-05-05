@@ -249,12 +249,26 @@ function dailyLogsBlock(ctx: CoachContext): string {
   return lines.join("\n");
 }
 
+function recentMessagesBlock(ctx: CoachContext, limit: number): string {
+  if (ctx.recent_messages.length === 0) return "";
+  const slice = ctx.recent_messages.slice(-limit);
+  const lines = [`## RECENT COACH CONVERSATION (last ${slice.length} messages)`];
+  for (const m of slice) {
+    const text = m.content.replace(/\s+/g, " ").trim();
+    lines.push(`[${m.role}]: ${text}`);
+  }
+  return lines.join("\n");
+}
+
 // Build a compact, structured context block for the model.
 // Daily logs and activity are rendered as text lines (more compact, easier
 // for the model to scan); meals and yesterday's plan stay as JSON for
 // precise parsing. The long-term knowledge dossier uses labelled markdown
 // sections.
-export function contextBlock(ctx: CoachContext): string {
+export function contextBlock(
+  ctx: CoachContext,
+  opts?: { includeRecentMessages?: number }
+): string {
   const slim = {
     today: ctx.today,
     profile: ctx.profile && {
@@ -291,7 +305,10 @@ export function contextBlock(ctx: CoachContext): string {
     "\n</context>";
   const activity = activityBlock(ctx);
   const dossier = knowledgeBlock(ctx.knowledge);
-  return [dossier, activity, logs, recent].filter((s) => s).join("\n\n");
+  const messages = opts?.includeRecentMessages
+    ? recentMessagesBlock(ctx, opts.includeRecentMessages)
+    : "";
+  return [dossier, activity, logs, recent, messages].filter((s) => s).join("\n\n");
 }
 
 export function coachSystemPrompt(ctx: CoachContext): string {

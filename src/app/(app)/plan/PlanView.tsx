@@ -7,20 +7,22 @@ import type { TrainingPlan } from "@/lib/types";
 export default function PlanView({ plan }: { plan: TrainingPlan }) {
   const router = useRouter();
   const [notes, setNotes] = useState(plan.completion_notes ?? "");
-  const [busy, setBusy] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const busy = completing || regenerating;
 
   async function complete(completed: boolean) {
-    setBusy(true);
+    setCompleting(true);
     setErr(null);
     const res = await fetch(`/api/plan/${plan.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ completed, completion_notes: notes.trim() || null }),
     });
-    setBusy(false);
+    setCompleting(false);
     if (!res.ok) {
-      setErr("Couldn't update.");
+      setErr("Couldn't update — try again.");
       return;
     }
     router.refresh();
@@ -28,17 +30,17 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
 
   async function regenerate() {
     if (!confirm("Replace today's plan with a freshly generated one?")) return;
-    setBusy(true);
+    setRegenerating(true);
     setErr(null);
     const res = await fetch("/api/plan", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ replace: true }),
+      body: JSON.stringify({ force: true }),
     });
-    setBusy(false);
+    setRegenerating(false);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      setErr(j?.error || "Couldn't regenerate.");
+      setErr(j?.error || "Couldn't regenerate — try again.");
       return;
     }
     router.refresh();
@@ -115,7 +117,13 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
             onClick={() => complete(!plan.completed)}
             className="rounded-xl bg-zinc-100 text-zinc-900 font-medium py-3 disabled:opacity-50 min-h-[44px]"
           >
-            {plan.completed ? "Reopen" : "Mark done"}
+            {completing
+              ? plan.completed
+                ? "Reopening…"
+                : "Saving…"
+              : plan.completed
+                ? "Completed ✓ — Reopen"
+                : "Mark done"}
           </button>
           <button
             type="button"
@@ -123,7 +131,7 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
             onClick={regenerate}
             className="rounded-xl bg-zinc-800 text-zinc-100 py-3 disabled:opacity-50 min-h-[44px]"
           >
-            Regenerate
+            {regenerating ? "Regenerating…" : "Regenerate"}
           </button>
         </div>
       </div>

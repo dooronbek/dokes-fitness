@@ -21,12 +21,15 @@ type PlanJSON = {
 
 const SYSTEM = `You design today's training session for a single user.
 
-Three sources of context come in the user message:
+PRIORITY RULE: If the RECENT COACH CONVERSATION contains a stated preference for today's training (e.g., "I want to run today", "rest day", "let's lift heavy"), treat that preference as authoritative. Build the plan around that activity. Adjust intensity and structure based on recovery signals from activity data and morning logs, but do not override the user's stated choice of activity type.
+
+Four sources of context come in the user message:
 - LONG-TERM KNOWLEDGE (markdown sections): stable facts about this person — background, PRs, goals, injuries, equipment constraints, preferences, lifestyle. Treat as ground truth.
 - ACTIVITY DATA (last 14 days from watch/phone): daily steps, sleep, HR, HRV, plus actual workouts. This is what the user truly did, not just what they said.
 - RECENT DATA (<context> JSON): last 7 days of profile, daily logs, meals, and yesterday's plan + completion.
+- RECENT COACH CONVERSATION (last messages between user and coach): the most current signal of what the user wants today. The PRIORITY RULE above governs how to use it.
 
-Use all three. If ACTIVITY DATA is empty, mention briefly that connecting Health Auto Export would let you plan better recovery-aware sessions. If long-term knowledge contradicts a single recent data point, prefer the recent data but acknowledge the shift.
+Use all four. If ACTIVITY DATA is empty, mention briefly that connecting Health Auto Export would let you plan better recovery-aware sessions. If long-term knowledge contradicts a single recent data point, prefer the recent data but acknowledge the shift.
 
 Adapt to recovery using ACTIVITY DATA + daily logs together: poor sleep, low HRV, high resting HR, low mood/energy, high soreness, or hard workouts in the last 24-48h → lighter session or active recovery. Long stretch with no workouts and good sleep → progress load. Avoid hammering body parts that were trained recently per ACTIVITY DATA workouts. Respect injuries (from long-term knowledge AND profile.injuries_notes) and equipment constraints.
 
@@ -71,11 +74,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { replace?: boolean };
+  const body = (await req.json().catch(() => ({}))) as {
+    force?: boolean;
+    replace?: boolean;
+  };
+  const force = Boolean(body.force ?? body.replace);
   const sb = supabaseServer();
   const today = todayISO();
 
-  if (!body.replace) {
+  if (!force) {
     const { data: existing } = await sb
       .from("training_plans")
       .select("id")
@@ -86,10 +93,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const ctx = await loadCoachContext();
+  const ctx = await loadCoachContext({ includeMessages: true, messageLimit: 10 });
   if (!ctx.profile?.onboarded_at) {
     return NextResponse.json({ error: "Onboarding required" }, { status: 400 });
   }
+
+  const lastUserMsg =
+    [...ctx.recent_messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const lastUserPreview = lastUserMsg.replace(/\s+/g, " ").trim().slice(0, 120);
 
   let parsed: { json: PlanJSON; friendly: string };
   try {
@@ -101,7 +112,7 @@ export async function POST(req: NextRequest) {
         {
           role: "user",
           content:
-            contextBlock(ctx) +
+            contextBlock(ctx, { includeRecentMessages: 10 }) +
             "\n\nDesign today's session. Return <json>...</json> then <friendly>...</friendly>.",
         },
       ],
@@ -130,20 +141,32 @@ export async function POST(req: NextRequest) {
     completion_notes: null,
   };
 
-  let result;
-  if (body.replace) {
-    const { data, error } = await sb
+  // For force=true we delete the existing row first, so the new insert gets
+  // a fresh created_at default (upsert preserves the original timestamp).
+  if (force) {
+    const { error: delErr } = await sb
       .from("training_plans")
-      .upsert(row, { onConflict: "plan_date" })
-      .select()
-      .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    result = data;
-  } else {
-    const { data, error } = await sb.from("training_plans").insert(row).select().single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    result = data;
+      .delete()
+      .eq("plan_date", today);
+    if (delErr) {
+      return NextResponse.json({ error: delErr.message }, { status: 500 });
+    }
   }
 
-  return NextResponse.json({ plan: result });
+  const { data: inserted, error: insErr } = await sb
+    .from("training_plans")
+    .insert(row)
+    .select()
+    .single();
+  if (insErr) {
+    return NextResponse.json({ error: insErr.message }, { status: 500 });
+  }
+
+  console.log(
+    `[plan] generate plan_date=${today} force=${force} last_user_msg=${JSON.stringify(
+      lastUserPreview
+    )} focus=${row.focus ?? "?"} duration=${row.total_minutes ?? "?"}`
+  );
+
+  return NextResponse.json({ plan: inserted });
 }
