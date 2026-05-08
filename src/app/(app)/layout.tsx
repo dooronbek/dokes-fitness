@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { isAuthedServer } from "@/lib/auth";
-import { supabaseServer } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
 import SplashScreen from "@/components/SplashScreen";
 import { getRandomQuote } from "@/lib/quotes";
@@ -17,13 +16,7 @@ export default async function AppLayout({
 }) {
   if (!(await isAuthedServer())) redirect("/login");
 
-  // Onboarding gate — only when not already on /onboarding (handled per-page).
-  // We do a single profile fetch here for the layout shell.
-  const sb = supabaseServer();
-  const [{ data: profile }, quote] = await Promise.all([
-    sb.from("profile").select("onboarded_at").eq("id", 1).maybeSingle(),
-    getRandomQuote(),
-  ]);
+  const quote = await getRandomQuote();
 
   return (
     <div className="min-h-dvh flex flex-col bg-zinc-950 text-zinc-100">
@@ -35,7 +28,7 @@ export default async function AppLayout({
       >
         {children}
       </main>
-      {profile?.onboarded_at && <BottomNav />}
+      <BottomNav />
     </div>
   );
 }

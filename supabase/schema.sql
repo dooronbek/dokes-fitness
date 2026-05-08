@@ -1,20 +1,64 @@
 -- Dokes Fitness — schema. Single-user app, no RLS needed (service role only).
 -- Safe to re-run.
 
-create table if not exists public.profile (
-  id              integer primary key,           -- always 1 (singleton)
-  goals           text,
-  height_cm       numeric,
-  age             integer,
-  sex             text,
-  activity_level  text,
-  dietary_preferences text,
-  injuries_notes  text,
-  coaching_style  text,
-  onboarded_at    timestamptz,
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+-- Structured user profile (replaces the legacy free-form coach_knowledge dossier
+-- AND the old `profile` demographics table). 17 discrete fields; singleton row id=1.
+create table if not exists public.user_profile (
+  id smallint primary key default 1 check (id = 1),
+  name text,
+  age smallint,
+  height_cm smallint,
+  sex text check (sex in ('male', 'female', 'other')),
+  primary_goal_short text,
+  primary_goal_long text,
+  athletic_background text,
+  current_state text,
+  lifestyle text,
+  preferred_training_days_per_week smallint,
+  preferred_session_minutes smallint,
+  equipment_constraints_general text,
+  preferences_psychology text,
+  diet_pattern text,
+  injuries_active text,
+  injuries_history text,
+  other_conditions text,
+  updated_at timestamptz not null default now()
 );
+insert into public.user_profile (id) values (1) on conflict (id) do nothing;
+
+-- Personal records (max 8 tracked exercises). Auto-detected from completed
+-- plans where possible; manual override always wins (source = 'manual').
+create table if not exists public.personal_records (
+  id uuid primary key default gen_random_uuid(),
+  exercise text not null unique
+    check (exercise in ('deadlift', 'bench_press', 'barbell_squat', 'pullups', 'pushups', 'plank', 'run_5k', 'run_1k')),
+  value_numeric numeric not null,
+  value_unit text not null check (value_unit in ('kg', 'reps', 'seconds', 'minutes')),
+  reps_at_pr smallint,
+  source text not null check (source in ('auto', 'manual')),
+  set_at date not null,
+  notes text,
+  updated_at timestamptz not null default now()
+);
+
+-- Cached training stats (computed on /knowledge load, read for prompts).
+-- Singleton row id=1.
+create table if not exists public.dossier_stats (
+  id smallint primary key default 1 check (id = 1),
+  midterm jsonb,
+  longterm jsonb,
+  computed_at timestamptz not null default now()
+);
+insert into public.dossier_stats (id, midterm, longterm) values (1, null, null) on conflict (id) do nothing;
+
+-- Legacy `profile` table — replaced by user_profile. Demographic fields
+-- (age, height_cm, sex) moved into user_profile; BMR computation now reads
+-- user_profile. Onboarding gate is retired. Drop after deploy.
+drop table if exists public.profile cascade;
+
+-- Legacy `coach_knowledge` (the free-form dossier) is preserved for one
+-- release as a safety fallback. Drop in a follow-up commit after the
+-- structured dossier is verified.
 
 create table if not exists public.daily_log (
   id              bigserial primary key,

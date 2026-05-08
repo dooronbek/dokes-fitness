@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase";
 import { daysAgoISO, todayISO } from "@/lib/dates";
 import TrendChart from "@/components/TrendChart";
@@ -9,14 +8,6 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const sb = supabaseServer();
-
-  const { data: profile } = await sb
-    .from("profile")
-    .select("onboarded_at, goals, coaching_style")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (!profile?.onboarded_at) redirect("/onboarding");
 
   const today = todayISO();
   const since30 = daysAgoISO(30);

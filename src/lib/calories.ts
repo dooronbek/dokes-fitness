@@ -39,7 +39,7 @@ export async function getCalorieBreakdown(
   const sb = supabaseServer();
 
   const [profileRes, weightRes, activityRes] = await Promise.all([
-    sb.from("profile").select("height_cm, age, sex").eq("id", 1).maybeSingle(),
+    sb.from("user_profile").select("height_cm, age, sex").eq("id", 1).maybeSingle(),
     sb
       .from("daily_log")
       .select("weight_kg, log_date")

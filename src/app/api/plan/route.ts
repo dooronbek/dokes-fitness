@@ -45,7 +45,7 @@ A 14-day window catches biweekly cycles and prevents repeating the same focus to
 Use ACTIVITY DATA + daily logs:
 - Poor sleep (<3/5), low energy, high resting HR, recent hard session → lighter day or active recovery
 - Good sleep, recovered, no recent hard session → progress load
-- Respect injuries from LONG-TERM KNOWLEDGE and profile.injuries_notes
+- Respect injuries from LONG-TERM KNOWLEDGE > HEALTH (injuries_active, injuries_history)
 - Avoid hammering body parts trained in the last 24-48h
 
 ## STEP 4 — Apply location & equipment constraint (STRICT)
@@ -99,12 +99,19 @@ A short, warm message to the user (3-6 sentences) explaining today's session. Re
 
 ## Context inputs
 
-Four sources of context come in the user message:
-- LONG-TERM KNOWLEDGE: stable facts about this person — background, PRs, goals, injuries, equipment constraints, preferences, lifestyle. Treat as ground truth.
+Five sources of context come in the user message:
+- LONG-TERM KNOWLEDGE: structured sections — PROFILE (identity), GOALS (short + long), BACKGROUND, TRAINING PREFERENCES (including psychology / coaching style), DIET, HEALTH, PERSONAL RECORDS (8 tracked exercises), and TRAINING HISTORY (mid-term: 30 days ending 14 days ago; long-term: last year). Treat as ground truth.
 - ACTIVITY DATA (last 14 days from watch/phone): daily steps, sleep, HR, plus actual workouts. What the user truly did.
-- RECENT DATA (JSON): last 7 days of profile, daily logs, meals, yesterday's plan + completion.
+- PAST PLANS (last 14 days): full exercise detail per session — focus, sets, reps, loads, completion notes.
+- RECENT DATA (JSON): last 7 days of daily logs, meals, yesterday's plan + completion.
 - TODAY'S TRAINING LOCATION: equipment + running availability for the session you're designing.
 - RECENT COACH CONVERSATION: most current signal of what the user wants today.
+
+PERSONAL RECORDS reflect the user's documented bests. Use them for progression reasoning. Coaching style and motivators are in TRAINING PREFERENCES > preferences_psychology — adapt phrasing in the friendly message to what's stated there.
+
+TRAINING HISTORY excludes the most recent 14 days (which appear in PAST PLANS with full exercise detail). Use TRAINING HISTORY for long-term consistency reasoning, PAST PLANS for current programming.
+
+When proposing loads in \`main\` exercises, reference PERSONAL RECORDS for progression — e.g., "user's bench PR is 90 kg × — so today's working sets at 65-70% = ~63 kg".
 
 If ACTIVITY DATA is empty, mention briefly in 'why' that connecting Health Auto Export would let you plan better recovery-aware sessions.`;
 
@@ -176,9 +183,6 @@ export async function POST(req: NextRequest) {
   }
 
   const ctx = await loadCoachContext({ includeMessages: true, messageLimit: 10 });
-  if (!ctx.profile?.onboarded_at) {
-    return NextResponse.json({ error: "Onboarding required" }, { status: 400 });
-  }
 
   const lastUserMsg =
     [...ctx.recent_messages].reverse().find((m) => m.role === "user")?.content ?? "";

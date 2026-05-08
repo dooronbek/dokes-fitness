@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthedFromRequest } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase";
 import { anthropic, MODEL, extractJSON, extractText } from "@/lib/anthropic";
-import { knowledgeBlock } from "@/lib/context";
+import { dietContextBlock } from "@/lib/context";
 import { todayISO } from "@/lib/dates";
-import type { CoachKnowledge } from "@/lib/types";
+import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 // Photos are sent to Claude vision in-memory and discarded — never persisted to
@@ -52,15 +52,12 @@ export async function POST(req: NextRequest) {
   const sb = supabaseServer();
   const today = todayISO();
 
-  const { data: knowledgeRow } = await sb
-    .from("coach_knowledge")
+  const { data: profileRow } = await sb
+    .from("user_profile")
     .select("*")
     .eq("id", 1)
     .maybeSingle();
-  const dossier = knowledgeBlock(
-    (knowledgeRow ?? null) as CoachKnowledge | null,
-    ["diet_reality", "constraints", "goals_short_term", "goals_long_term"]
-  );
+  const dossier = dietContextBlock((profileRow ?? null) as UserProfile | null);
 
   type ImgMime = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
   const ALLOWED: ImgMime[] = ["image/jpeg", "image/png", "image/webp", "image/gif"];

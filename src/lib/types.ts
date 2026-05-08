@@ -1,14 +1,104 @@
-export type Profile = {
-  id: number;
-  goals: string | null;
-  height_cm: number | null;
+export type UserProfile = {
+  id: 1;
+  name: string | null;
   age: number | null;
-  sex: string | null;
-  activity_level: string | null;
-  dietary_preferences: string | null;
-  injuries_notes: string | null;
-  coaching_style: string | null;
-  onboarded_at: string | null;
+  height_cm: number | null;
+  sex: "male" | "female" | "other" | null;
+  primary_goal_short: string | null;
+  primary_goal_long: string | null;
+  athletic_background: string | null;
+  current_state: string | null;
+  lifestyle: string | null;
+  preferred_training_days_per_week: number | null;
+  preferred_session_minutes: number | null;
+  equipment_constraints_general: string | null;
+  preferences_psychology: string | null;
+  diet_pattern: string | null;
+  injuries_active: string | null;
+  injuries_history: string | null;
+  other_conditions: string | null;
+  updated_at: string;
+};
+
+export type PRExercise =
+  | "deadlift"
+  | "bench_press"
+  | "barbell_squat"
+  | "pullups"
+  | "pushups"
+  | "plank"
+  | "run_5k"
+  | "run_1k";
+
+export const PR_EXERCISES: readonly PRExercise[] = [
+  "deadlift",
+  "bench_press",
+  "barbell_squat",
+  "pullups",
+  "pushups",
+  "plank",
+  "run_5k",
+  "run_1k",
+];
+
+export type PersonalRecord = {
+  id: string;
+  exercise: PRExercise;
+  value_numeric: number;
+  value_unit: "kg" | "reps" | "seconds" | "minutes";
+  reps_at_pr: number | null;
+  source: "auto" | "manual";
+  set_at: string;
+  notes: string | null;
+  updated_at: string;
+};
+
+export type DossierStatsMidterm = {
+  workouts_total: number;
+  workouts_by_type: {
+    strength: number;
+    cardio: number;
+    mobility: number;
+    mixed: number;
+    rest: number;
+  };
+  adherence_completed: number;
+  adherence_generated: number;
+  avg_session_minutes: number | null;
+  avg_hr_by_type: {
+    strength: number | null;
+    cardio: number | null;
+  };
+  avg_sleep_quality: number | null;
+  avg_energy: number | null;
+  avg_resting_hr: number | null;
+  weight_delta_kg: number | null;
+  waist_delta_cm: number | null;
+};
+
+export type DossierStatsLongterm = {
+  workouts_total: number;
+  workouts_by_type: {
+    strength: number;
+    cardio: number;
+    mobility: number;
+    mixed: number;
+    rest: number;
+  };
+  adherence_completed: number;
+  adherence_generated: number;
+  longest_streak_days: number;
+  avg_sleep_quality: number | null;
+  avg_resting_hr: number | null;
+  weight_start_kg: number | null;
+  weight_lowest_kg: number | null;
+  weight_current_kg: number | null;
+};
+
+export type DossierStats = {
+  midterm: DossierStatsMidterm | null;
+  longterm: DossierStatsLongterm | null;
+  computed_at: string | null;
 };
 
 export type DailyLog = {
@@ -122,18 +212,3 @@ export type CoachMessage = {
   created_at?: string;
 };
 
-export type CoachKnowledge = {
-  id: number;
-  background: string | null;
-  current_state: string | null;
-  personal_records: string | null;
-  goals_short_term: string | null;
-  goals_long_term: string | null;
-  injuries: string | null;
-  constraints: string | null;
-  diet_reality: string | null;
-  preferences: string | null;
-  lifestyle: string | null;
-  freeform: string | null;
-  updated_at: string;
-};
