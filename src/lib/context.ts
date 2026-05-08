@@ -7,6 +7,7 @@ import type {
   CoachMessage,
   DailyLog,
   Meal,
+  PlanExercise,
   Profile,
   TrainingLocation,
   TrainingPlan,
@@ -36,6 +37,7 @@ export async function loadCoachContext(opts?: {
   const today = todayISO();
   const since = daysAgoISO(7);
   const since14 = daysAgoISO(13);
+  const sincePlans = daysAgoISO(14);
   const yesterday = daysAgoISO(1);
 
   const [
@@ -85,7 +87,7 @@ export async function loadCoachContext(opts?: {
     sb
       .from("training_plans")
       .select("*")
-      .gte("plan_date", since)
+      .gte("plan_date", sincePlans)
       .lt("plan_date", today)
       .order("plan_date", { ascending: false }),
     opts?.includeMessages
@@ -266,19 +268,53 @@ function dailyLogsBlock(ctx: CoachContext): string {
   return lines.join("\n");
 }
 
+function exerciseLine(ex: PlanExercise): string {
+  const head = ex.exercise.trim();
+  const parts: string[] = [];
+  if (ex.sets != null && ex.reps != null) {
+    parts.push(`${ex.sets}×${ex.reps}`);
+  } else if (ex.sets != null) {
+    parts.push(`${ex.sets} sets`);
+  } else if (ex.reps != null) {
+    parts.push(String(ex.reps));
+  }
+  if (ex.load_guidance && ex.load_guidance.trim()) {
+    parts.push(ex.load_guidance.trim());
+  }
+  if (ex.notes && ex.notes.trim()) {
+    parts.push(`"${ex.notes.trim()}"`);
+  }
+  return parts.length ? `- ${head}: ${parts.join(", ")}` : `- ${head}`;
+}
+
 function pastPlansBlock(ctx: CoachContext): string {
   if (ctx.recent_plans.length === 0) return "";
-  const lines = ["## PAST PLANS (last 7 days, most recent first)"];
+  const lines: string[] = ["## PAST PLANS (last 14 days, most recent first)", ""];
   for (const p of ctx.recent_plans) {
     const focus = (p.focus ?? "Plan").trim();
-    const dur = p.total_minutes != null ? ` ${p.total_minutes}min` : "";
-    const status = p.completed ? "completed" : "not completed";
-    const hr = p.avg_hr != null ? `, HR avg ${p.avg_hr}` : "";
+    const dur = p.total_minutes != null ? `, ${p.total_minutes}min` : "";
     const loc = p.location_id ? ctx.locations_by_id.get(p.location_id) : null;
     const locTag = loc ? ` @ ${loc.name}` : "";
-    lines.push(`- ${p.plan_date}: ${focus}${dur}${locTag} — ${status}${hr}`);
+    const status = p.completed ? "completed" : "not completed";
+    const hr = p.avg_hr != null ? `, HR avg ${p.avg_hr}` : "";
+    lines.push(`### ${p.plan_date} — ${focus}${dur}${locTag} — ${status}${hr}`);
+
+    if (!p.completed) {
+      lines.push("(skipped)");
+    } else if (!p.main || p.main.length === 0) {
+      lines.push("(no exercises recorded)");
+    } else {
+      lines.push("Main:");
+      for (const ex of p.main) {
+        lines.push(exerciseLine(ex));
+      }
+      if (p.completion_notes && p.completion_notes.trim()) {
+        lines.push(`Notes: ${p.completion_notes.trim()}`);
+      }
+    }
+    lines.push("");
   }
-  return lines.join("\n");
+  return lines.join("\n").trimEnd();
 }
 
 function recentMessagesBlock(ctx: CoachContext, limit: number): string {
@@ -363,6 +399,7 @@ export function coachSystemPrompt(ctx: CoachContext): string {
     "Total calories burned per day is computed as: Mifflin-St Jeor BMR (using the user's height, age, sex, and most recent logged weight) + Active calories from their watch. If a day has no weight logged on or before it, total is not shown — gently encourage the user to log weight regularly so calorie math stays accurate.",
     "active_kcal is the total active energy from the user's watch (Zepp via Apple Health), already including both ambient activity throughout the day AND any recorded workouts. Workouts shown separately in the WORKOUTS section are for training context (type, duration, HR) but their calorie values are already reflected in the daily active_kcal — do NOT sum them.",
     "The DAILY LOGS and RECENT DATA sections reflect the last 7-14 days of logged behavior (daily check-ins, meals, yesterday's plan). Use all sources together.",
+    "PAST PLANS now spans 14 days and includes full exercise lists with weights, reps, and completion notes. Reference specific lifts and progress when relevant (\"you squatted 12kg DB x 8 last Tuesday — today try 14kg x 6-8 if it felt easy\").",
     "If long-term knowledge contradicts a single recent data point (e.g., user noted today they're bored of an exercise they previously listed as a favorite), prefer the recent data but acknowledge the shift.",
     "Be specific. Reference actual numbers from the context when relevant. Do not invent data that isn't there.",
     "Mobile chat — keep replies short. Bullet points over paragraphs. No filler preambles.",

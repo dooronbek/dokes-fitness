@@ -28,13 +28,18 @@ From LONG-TERM KNOWLEDGE, identify the user's primary goal. Common goals:
 - General fitness / health: roughly balanced
 - Sport-specific: depends on the sport
 
-## STEP 2 — Analyze the last 7 days BEFORE deciding today's focus
-Count from PAST PLANS and ACTIVITY DATA workouts:
-- Strength sessions: ___
-- Cardio sessions (run, bike, row, etc.): ___
-- Rest / mobility days: ___
+## STEP 2 — Analyze the last 14 days BEFORE deciding today's focus
+PAST PLANS shows each day's full session: focus, exercises, sets/reps/loads, completion notes.
 
-Compare to what the goal demands. If the user is fat-loss focused and has done 4 strength sessions and 0 cardio in the last 7 days, today should be cardio. If strength-focused with no strength in 5 days, today should be strength.
+Use it to:
+- Count session types (strength vs cardio vs rest vs mobility)
+- Identify body parts trained recently (don't hammer them again today)
+- Track progressive overload — if user did "DB press 12kg × 8" last week and felt easy, today's load suggestion should reflect progression
+- See completion patterns (which sessions get skipped) and consider whether today should be more achievable
+
+Compare to the user's primary goal (STEP 1). If fat-loss focused and last 14 days are mostly strength, today should be cardio. If a body part was trained 2 days ago and is the only one you'd target today, pick a different focus.
+
+A 14-day window catches biweekly cycles and prevents repeating the same focus too soon.
 
 ## STEP 3 — Adapt to recovery
 Use ACTIVITY DATA + daily logs:
