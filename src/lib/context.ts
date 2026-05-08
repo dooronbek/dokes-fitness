@@ -8,6 +8,7 @@ import type {
   DailyLog,
   Meal,
   Profile,
+  TrainingLocation,
   TrainingPlan,
   Workout,
 } from "./types";
@@ -24,6 +25,7 @@ export type CoachContext = {
   recent_plans: TrainingPlan[];
   recent_messages: CoachMessage[];
   calorie_breakdowns: CalorieBreakdown[];
+  locations_by_id: Map<string, TrainingLocation>;
 };
 
 export async function loadCoachContext(opts?: {
@@ -46,6 +48,7 @@ export async function loadCoachContext(opts?: {
     yPlanRes,
     recentPlansRes,
     msgsRes,
+    locationsRes,
   ] = await Promise.all([
     sb.from("profile").select("*").eq("id", 1).maybeSingle(),
     sb.from("coach_knowledge").select("*").eq("id", 1).maybeSingle(),
@@ -92,7 +95,12 @@ export async function loadCoachContext(opts?: {
           .order("created_at", { ascending: false })
           .limit(opts.messageLimit ?? 20)
       : Promise.resolve({ data: [] as CoachMessage[], error: null }),
+    sb.from("training_locations").select("*"),
   ]);
+
+  const locations_by_id = new Map<string, TrainingLocation>(
+    ((locationsRes.data ?? []) as TrainingLocation[]).map((l) => [l.id, l])
+  );
 
   const recent_messages = (msgsRes.data ?? []).slice().reverse() as CoachMessage[];
 
@@ -128,6 +136,7 @@ export async function loadCoachContext(opts?: {
     recent_plans: (recentPlansRes.data ?? []) as TrainingPlan[],
     recent_messages,
     calorie_breakdowns,
+    locations_by_id,
   };
 }
 
@@ -265,7 +274,9 @@ function pastPlansBlock(ctx: CoachContext): string {
     const dur = p.total_minutes != null ? ` ${p.total_minutes}min` : "";
     const status = p.completed ? "completed" : "not completed";
     const hr = p.avg_hr != null ? `, HR avg ${p.avg_hr}` : "";
-    lines.push(`- ${p.plan_date}: ${focus}${dur} — ${status}${hr}`);
+    const loc = p.location_id ? ctx.locations_by_id.get(p.location_id) : null;
+    const locTag = loc ? ` @ ${loc.name}` : "";
+    lines.push(`- ${p.plan_date}: ${focus}${dur}${locTag} — ${status}${hr}`);
   }
   return lines.join("\n");
 }
@@ -317,6 +328,9 @@ export function contextBlock(
       completed: ctx.yesterday_plan.completed,
       completion_notes: ctx.yesterday_plan.completion_notes,
       avg_hr: ctx.yesterday_plan.avg_hr,
+      location_name: ctx.yesterday_plan.location_id
+        ? ctx.locations_by_id.get(ctx.yesterday_plan.location_id)?.name ?? null
+        : null,
     },
   };
   const logs =

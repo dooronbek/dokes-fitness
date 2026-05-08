@@ -1,10 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { TrainingPlan } from "@/lib/types";
+import type { TrainingLocation, TrainingPlan } from "@/lib/types";
+import LocationPickerModal from "./LocationPickerModal";
 
-export default function PlanView({ plan }: { plan: TrainingPlan }) {
+export default function PlanView({
+  plan,
+  locations,
+  planLocation,
+}: {
+  plan: TrainingPlan;
+  locations: TrainingLocation[];
+  planLocation: TrainingLocation | null;
+}) {
   const router = useRouter();
   const [notes, setNotes] = useState(plan.completion_notes ?? "");
   const [hrInput, setHrInput] = useState(
@@ -12,8 +22,10 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
   );
   const [completing, setCompleting] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const busy = completing || regenerating;
+  const hasLocations = locations.length > 0;
 
   async function complete(completed: boolean) {
     let avg_hr: number | null = null;
@@ -45,22 +57,27 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
     router.refresh();
   }
 
-  async function regenerate() {
-    if (!confirm("Replace today's plan with a freshly generated one?")) return;
+  async function regenerate(locationId: string) {
     setRegenerating(true);
     setErr(null);
     const res = await fetch("/api/plan", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ force: true }),
+      body: JSON.stringify({ force: true, location_id: locationId }),
     });
     setRegenerating(false);
+    setPickerOpen(false);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
       setErr(j?.error || "Couldn't regenerate — try again.");
       return;
     }
     router.refresh();
+  }
+
+  function startRegenerate() {
+    if (!confirm("Replace today's plan with a freshly generated one?")) return;
+    setPickerOpen(true);
   }
 
   return (
@@ -72,6 +89,14 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
             <span className="text-xs text-zinc-400">~{plan.total_minutes} min</span>
           )}
         </div>
+        {planLocation && (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-zinc-950/60 border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300">
+            <span>📍 {planLocation.name}</span>
+            {planLocation.running_available && (
+              <span className="text-emerald-400">· 🏃</span>
+            )}
+          </div>
+        )}
         {plan.friendly_text && (
           <p className="text-sm text-zinc-300 mt-2 whitespace-pre-wrap leading-relaxed">
             {plan.friendly_text}
@@ -149,6 +174,15 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
           className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 text-base outline-none focus:border-zinc-600"
         />
         {err && <p className="text-sm text-red-400">{err}</p>}
+        {!hasLocations && (
+          <p className="text-xs text-zinc-500">
+            Add a training location in{" "}
+            <Link href="/settings" className="underline underline-offset-2">
+              Settings
+            </Link>{" "}
+            to regenerate.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -166,14 +200,22 @@ export default function PlanView({ plan }: { plan: TrainingPlan }) {
           </button>
           <button
             type="button"
-            disabled={busy}
-            onClick={regenerate}
+            disabled={busy || !hasLocations}
+            onClick={startRegenerate}
             className="rounded-xl bg-zinc-800 text-zinc-100 py-3 disabled:opacity-50 min-h-[44px]"
           >
             {regenerating ? "Regenerating…" : "Regenerate"}
           </button>
         </div>
       </div>
+
+      <LocationPickerModal
+        locations={locations}
+        open={pickerOpen}
+        busy={regenerating}
+        onClose={() => setPickerOpen(false)}
+        onPick={regenerate}
+      />
     </div>
   );
 }

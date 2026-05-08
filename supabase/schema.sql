@@ -68,6 +68,14 @@ create table if not exists public.meals (
 );
 create index if not exists meals_meal_date_idx on public.meals (meal_date);
 
+create table if not exists public.training_locations (
+  id                uuid primary key default gen_random_uuid(),
+  name              text not null,
+  equipment         text not null,
+  running_available boolean not null default false,
+  created_at        timestamptz not null default now()
+);
+
 create table if not exists public.training_plans (
   id                bigserial primary key,
   plan_date         date not null unique,
@@ -82,6 +90,9 @@ create table if not exists public.training_plans (
   completion_notes  text,
   created_at        timestamptz not null default now()
 );
+
+alter table public.training_plans
+  add column if not exists location_id uuid references public.training_locations(id) on delete set null;
 
 -- Manually-entered avg HR captured at plan completion. HAE workout HR is
 -- unreliable (often missing or wrong source), so the user types the watch's

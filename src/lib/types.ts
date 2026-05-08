@@ -57,7 +57,16 @@ export type TrainingPlan = {
   completed: boolean | null;
   completion_notes: string | null;
   avg_hr: number | null;
+  location_id: string | null;
   created_at?: string;
+};
+
+export type TrainingLocation = {
+  id: string;
+  name: string;
+  equipment: string;
+  running_available: boolean;
+  created_at: string;
 };
 
 export type PlanExercise = {
