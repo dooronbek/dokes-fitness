@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   // Inject context as a leading user message; the actual question comes last.
   const messages = [
-    { role: "user" as const, content: contextBlock(ctx) },
+    { role: "user" as const, content: contextBlock(ctx, { includeTodayPlan: true }) },
     ...history,
     { role: "user" as const, content: userMsg },
   ];

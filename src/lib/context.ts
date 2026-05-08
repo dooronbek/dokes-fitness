@@ -23,6 +23,7 @@ export type CoachContext = {
   recent_activity: ActivityDaily[];
   recent_workouts: Workout[];
   yesterday_plan: TrainingPlan | null;
+  today_plan: TrainingPlan | null;
   recent_plans: TrainingPlan[];
   recent_messages: CoachMessage[];
   calorie_breakdowns: CalorieBreakdown[];
@@ -48,6 +49,7 @@ export async function loadCoachContext(opts?: {
     activityRes,
     workoutsRes,
     yPlanRes,
+    todayPlanRes,
     recentPlansRes,
     msgsRes,
     locationsRes,
@@ -83,6 +85,12 @@ export async function loadCoachContext(opts?: {
       .from("training_plans")
       .select("*")
       .eq("plan_date", yesterday)
+      .maybeSingle(),
+    sb
+      .from("training_plans")
+      .select("*")
+      .eq("plan_date", today)
+      .eq("completed", true)
       .maybeSingle(),
     sb
       .from("training_plans")
@@ -135,6 +143,7 @@ export async function loadCoachContext(opts?: {
     recent_activity,
     recent_workouts: (workoutsRes.data ?? []) as Workout[],
     yesterday_plan: (yPlanRes.data ?? null) as TrainingPlan | null,
+    today_plan: (todayPlanRes.data ?? null) as TrainingPlan | null,
     recent_plans: (recentPlansRes.data ?? []) as TrainingPlan[],
     recent_messages,
     calorie_breakdowns,
@@ -287,6 +296,31 @@ function exerciseLine(ex: PlanExercise): string {
   return parts.length ? `- ${head}: ${parts.join(", ")}` : `- ${head}`;
 }
 
+function todayPlanBlock(ctx: CoachContext): string {
+  const p = ctx.today_plan;
+  if (!p) return "";
+  const focus = (p.focus ?? "Plan").trim();
+  const dur = p.total_minutes != null ? `, ${p.total_minutes}min` : "";
+  const loc = p.location_id ? ctx.locations_by_id.get(p.location_id) : null;
+  const locTag = loc ? ` @ ${loc.name}` : "";
+  const lines: string[] = ["## TODAY'S PLAN (completed)", `${focus}${dur}${locTag}`];
+  if (!p.main || p.main.length === 0) {
+    lines.push("(no exercises recorded)");
+  } else {
+    lines.push("Main:");
+    for (const ex of p.main) {
+      lines.push(exerciseLine(ex));
+    }
+  }
+  if (p.avg_hr != null) {
+    lines.push(`HR avg ${p.avg_hr}`);
+  }
+  if (p.completion_notes && p.completion_notes.trim()) {
+    lines.push(`Notes: ${p.completion_notes.trim()}`);
+  }
+  return lines.join("\n");
+}
+
 function pastPlansBlock(ctx: CoachContext): string {
   if (ctx.recent_plans.length === 0) return "";
   const lines: string[] = ["## PAST PLANS (last 14 days, most recent first)", ""];
@@ -335,7 +369,7 @@ function recentMessagesBlock(ctx: CoachContext, limit: number): string {
 // sections.
 export function contextBlock(
   ctx: CoachContext,
-  opts?: { includeRecentMessages?: number }
+  opts?: { includeRecentMessages?: number; includeTodayPlan?: boolean }
 ): string {
   const slim = {
     today: ctx.today,
@@ -376,12 +410,13 @@ export function contextBlock(
     JSON.stringify(slim, null, 2) +
     "\n</context>";
   const activity = activityBlock(ctx);
+  const todayPlan = opts?.includeTodayPlan ? todayPlanBlock(ctx) : "";
   const pastPlans = pastPlansBlock(ctx);
   const dossier = knowledgeBlock(ctx.knowledge);
   const messages = opts?.includeRecentMessages
     ? recentMessagesBlock(ctx, opts.includeRecentMessages)
     : "";
-  return [dossier, activity, pastPlans, logs, recent, messages]
+  return [dossier, activity, todayPlan, pastPlans, logs, recent, messages]
     .filter((s) => s)
     .join("\n\n");
 }
@@ -400,6 +435,7 @@ export function coachSystemPrompt(ctx: CoachContext): string {
     "active_kcal is the total active energy from the user's watch (Zepp via Apple Health), already including both ambient activity throughout the day AND any recorded workouts. Workouts shown separately in the WORKOUTS section are for training context (type, duration, HR) but their calorie values are already reflected in the daily active_kcal — do NOT sum them.",
     "The DAILY LOGS and RECENT DATA sections reflect the last 7-14 days of logged behavior (daily check-ins, meals, yesterday's plan). Use all sources together.",
     "PAST PLANS now spans 14 days and includes full exercise lists with weights, reps, and completion notes. Reference specific lifts and progress when relevant (\"you squatted 12kg DB x 8 last Tuesday — today try 14kg x 6-8 if it felt easy\").",
+    "TODAY'S PLAN appears only when today's session is completed. Reference it directly when user asks about today's training. If it's missing, today is either not yet trained or not yet marked done.",
     "If long-term knowledge contradicts a single recent data point (e.g., user noted today they're bored of an exercise they previously listed as a favorite), prefer the recent data but acknowledge the shift.",
     "Be specific. Reference actual numbers from the context when relevant. Do not invent data that isn't there.",
     "Mobile chat — keep replies short. Bullet points over paragraphs. No filler preambles.",
