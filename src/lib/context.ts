@@ -1,5 +1,5 @@
 import { supabaseServer } from "./supabase";
-import { daysAgoISO, todayISO } from "./dates";
+import { daysAgoISO, nowInUserTZ, todayISO, yesterdayISO } from "./dates";
 import { getCalorieBreakdownRange, type CalorieBreakdown } from "./calories";
 import { epley1RM } from "./pr-detect";
 import {
@@ -585,6 +585,20 @@ function recentMessagesBlock(ctx: CoachContext, limit: number): string {
   return lines.join("\n");
 }
 
+// Authoritative time header. Goes FIRST in every context block so the model
+// never has to (and must never) infer the date itself. All date columns below
+// (log_date, meal_date, plan_date, activity_date) are in this same timezone.
+function currentTimeBlock(): string {
+  return [
+    '## CURRENT TIME (authoritative — always use these for "today", "yesterday", "N days ago")',
+    `Current local time: ${nowInUserTZ()}`,
+    `Today's date: ${todayISO()}`,
+    `Yesterday's date: ${yesterdayISO()}`,
+    "",
+    'When the user says "today" or "yesterday", resolve it against the dates above — never against your own training knowledge. Every date below (workouts, plans, logs, meals) is a calendar date in Asia/Bishkek (UTC+6) and lines up with these values. Prefer naming the exact date (e.g. "your June 16 strength session") over relative phrasing.',
+  ].join("\n");
+}
+
 // Build a compact, structured context block for the model.
 // Daily logs and activity are rendered as text lines (more compact, easier
 // for the model to scan); meals and yesterday's plan stay as JSON for
@@ -629,7 +643,7 @@ export function contextBlock(
   const messages = opts?.includeRecentMessages
     ? recentMessagesBlock(ctx, opts.includeRecentMessages)
     : "";
-  return [dossier, activity, todayPlan, pastPlans, logs, recent, messages]
+  return [currentTimeBlock(), dossier, activity, todayPlan, pastPlans, logs, recent, messages]
     .filter((s) => s)
     .join("\n\n");
 }
@@ -642,6 +656,7 @@ export function coachSystemPrompt(ctx: CoachContext): string {
   return [
     "You are Dokes, a personal AI fitness and nutrition coach for a single user.",
     styleHint,
+    'The user lives in Asia/Bishkek (UTC+6). The CURRENT TIME block at the very top of the context is the single source of truth for what day it is. Always resolve "today", "yesterday", and "N days ago" using those exact dates — never compute or guess the date yourself, and never assume the current date from your training. All date fields in the data (log_date, meal_date, plan_date, activity_date) are calendar dates in this same timezone and align with that block.',
     "Subjective ratings (sleep_quality, mood, energy) are user self-reports on a 1-5 scale. 1 = very poor, 5 = excellent. 3 is average. 4-5 is a good day.",
     "LONG-TERM KNOWLEDGE has structured sections: PROFILE (identity), GOALS (short + long), BACKGROUND, TRAINING PREFERENCES (including psychology / coaching style), DIET, HEALTH, PERSONAL RECORDS (8 tracked exercises), and TRAINING HISTORY (mid-term: 30 days ending 14 days ago; long-term: last year). Treat it as ground truth.",
     "PERSONAL RECORDS reflect the user's documented bests. Use them for progression reasoning. Coaching style and motivators are in TRAINING PREFERENCES > preferences_psychology — adapt your tone and approach to what's stated there.",
